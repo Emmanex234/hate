@@ -1,0 +1,36 @@
+# Core Flask and web dependencies
+Flask==2.3.3
+Flask-CORS==4.0.0
+gunicorn==21.2.0
+
+# Machine Learning and Data Processing
+scikit-learn==1.3.0
+pandas==2.0.3
+numpy==1.24.3
+scipy==1.11.1
+
+# Text Processing and NLP
+textblob==0.17.1
+nltk==3.8.1
+
+# Dataset and Model Management
+kagglehub==0.2.5
+pickle-mixin==1.0.2
+
+# Performance and Monitoring
+psutil==5.9.5
+memory-profiler==0.61.0
+
+# Additional utilities
+unicodedata2==15.0.0
+python-dateutil==2.8.2
+pytz==2023.3
+
+# Optional advanced features (comment out if memory constrained)
+# transformers==4.35.0
+# torch==2.1.0
+# sentence-transformers==2.2.2
+
+# Development and testing (optional)
+pytest==7.4.2
+pytest-flask==1.2.0

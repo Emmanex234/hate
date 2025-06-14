@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Hate Speech Detector</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            width: 100%;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            margin: 10px 0;
+            transition: all 0.3s ease;
+        }
+
+        .status-ready {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-training {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .input-section {
+            margin-bottom: 30px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 120px;
+            transition: border-color 0.3s ease;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            flex: 1;
+            min-width: 120px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #495057;
+            border: 2px solid #dee2e6;
+        }
+
+        .btn-secondary:hover {
+            background: #e9ecef;
+            border-color: #adb5bd;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a6f);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .result-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            border-left: 5px solid #667eea;
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .result-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+        }
+
+        .icon-safe {
+            background: #28a745;
+        }
+
+        .icon-danger {
+            background: #dc3545;
+        }
+
+        .prediction-text {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .confidence-bar {
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 20px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.5s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .confidence-safe {
+            background: linear-gradient(90deg, #28a745, #20c997);
+        }
+
+        .confidence-danger {
+            background: linear-gradient(90deg, #dc3545, #e74c3c);
+        }
+
+        .details-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 10px;
+            border: 1px solid #dee2e6;
+        }
+
+        .details-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .detail-item {
+            text-align: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .detail-value {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .detail-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .model-info {
+            background: #e3f2fd;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            border-left: 4px solid #2196f3;
+        }
+
+        .model-info h3 {
+            color: #1976d2;
+            margin-bottom: 10px;
+        }
+
+        .model-info ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        .model-info li {
+            padding: 5px 0;
+            color: #0d47a1;
+        }
+
+        .model-info li:before {
+            content: "✓ ";
+            color: #4caf50;
+            font-weight: bold;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+                margin: 10px;
+            }
+
+            .header h1 {
+                font-size: 2em;
+            }
+
+            .button-group {
+                flex-direction: column;
+            }
+
+            .details-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .feedback-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff3cd;
+            border-radius: 10px;
+            border: 1px solid #ffeaa7;
+        }
+
+        .feedback-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .btn-feedback {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-correct {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-incorrect {
+            background: #dc3545;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛡️ Advanced Hate Speech Detector</h1>
+            <p>Multi-dataset ensemble model for accurate hate speech detection</p>
+            <div id="statusIndicator" class="status-indicator">
+                <span id="statusText">Checking status...</span>
+            </div>
+        </div>
+
+        <div class="model-info">
+            <h3>🚀 Enhanced Features</h3>
+            <ul>
+                <li>Multiple dataset training (Nigerian, Twitter, Cyberbullying, etc.)</li>
+                <li>Ensemble model combining Logistic Regression + SVM</li>
+                <li>Advanced linguistic feature extraction</li>
+                <li>Real-time sentiment analysis</li>
+                <li>Comprehensive bias testing</li>
+                <li>Continuous learning from user feedback</li>
+            </ul>
+        </div>
+
+        <div class="input-section">
+            <div class="input-group">
+                <textarea 
+                    id="textInput" 
+                    placeholder="Enter text to analyze for hate speech... 
+                    
+Example texts to try:
+- 'I love spending time with my friends'
+- 'You people are so annoying'
+- 'This is a great day!'
+                    "
+                    maxlength="2000"
+                ></textarea>
+                
+                <div class="button-group">
+                    <button id="analyzeBtn" class="btn-primary" onclick="analyzeText()">
+                        🔍 Analyze Text
+                    </button>
+                    <button id="clearBtn" class="btn-secondary" onclick="clearResults()">
+                        🗑️ Clear
+                    </button>
+                    <button id="trainBtn" class="btn-danger" onclick="trainModel()">
+                        🏋️ Train Model
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Analyzing text with advanced AI models...</p>
+        </div>
+
+        <div id="results" class="result-section hidden">
+            <div class="result-header">
+                <div id="resultIcon" class="result-icon"></div>
+                <div id="predictionText" class="prediction-text"></div>
+            </div>
+            
+            <div class="confidence-bar">
+                <div id="confidenceFill" class="confidence-fill"></div>
+            </div>
+            
+            <div class="details-section">
+                <h4>📊 Detailed Analysis</h4>
+                <div class="details-grid">
+                    <div class="detail-item">
+                        <div id="hateProb" class="detail-value">-</div>
+                        <div class="detail-label">Hate Probability</div>
+                    </div>
+                    <div class="detail-item">
+                        <div id="sentiment" class="detail-value">-</div>
+                        <div class="detail-label">Sentiment</div>
+                    </div>
+                    <div class="detail-item">
+                        <div id="wordCount" class="detail-value">-</div>
+                        <div class="detail-label">Word Count</div>
+                    </div>
+                    <div class="detail-item">
+                        <div id="capsRatio" class="detail-value">-</div>
+                        <div class="detail-label">Caps Ratio</div>
+                    </div>
+                </div>
+                
+                <div id="individualModels" class="details-section" style="margin-top: 15px;">
+                    <h5>🤖 Individual Model Predictions</h5>
+                    <div id="modelPredictions"></div>
+                </div>
+            </div>
+
+            <div id="feedbackSection" class="feedback-section">
+                <h5>📝 Was this prediction correct?</h5>
+                <p>Your feedback helps improve the model</p>
+                <div class="feedback-buttons">
+                    <button class="btn-feedback btn-correct" onclick="submitFeedback(true)">
+                        ✅ Correct
+                    </button>
+                    <button class="btn-feedback btn-incorrect" onclick="submitFeedback(false)">
+                        ❌ Incorrect
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let lastPrediction = null;
+        let lastText = null;
+
+        // Check model status on page load
+        window.addEventListener('load', checkModelStatus);
+
+        async function checkModelStatus() {
+            try {
+                const response = await fetch('/status');
+                const data = await response.json();
+                
+                const statusIndicator = document.getElementById('statusIndicator');
+                const statusText = document.getElementById('statusText');
+                
+                if (data.trained) {
+                    statusIndicator.className = 'status-indicator status-ready';
+                    statusText.textContent = `✅ Model Ready (${data.model_version})`;
+                    document.getElementById('analyzeBtn').disabled = false;
+                } else if (data.training_in_progress) {
+                    statusIndicator.className = 'status-indicator status-training';
+                    statusText.textContent = '🔄 Training in Progress...';
+                    document.getElementById('analyzeBtn').disabled = true;
+                    // Check again in 10 seconds
+                    setTimeout(checkModelStatus, 10000);
+                } else {
+                    statusIndicator.className = 'status-indicator status-error';
+                    statusText.textContent = '⚠️ Model Not Trained';
+                    document.getElementById('analyzeBtn').disabled = true;
+                }
+            } catch (error) {
+                console.error('Error checking status:', error);
+                const statusIndicator = document.getElementById('statusIndicator');
+                const statusText = document.getElementById('statusText');
+                statusIndicator.className = 'status-indicator status-error';
+                statusText.textContent = '❌ Connection Error';
+            }
+        }
+
+        async function analyzeText() {
+            const text = document.getElementById('textInput').value.trim();
+            
+            if (!text) {
+                alert('Please enter some text to analyze');
+                return;
+            }
+
+            // Show loading
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('results').classList.add('hidden');
+            document.getElementById('analyzeBtn').disabled = true;
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text: text })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                displayResults(data);
+                lastPrediction = data;
+                lastText = text;
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error analyzing text: ' + error.message);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('analyzeBtn').disabled = false;
+            }
+        }
+
+        function displayResults(data) {
+            const resultsDiv = document.getElementById('results');
+            const resultIcon = document.getElementById('resultIcon');
+            const predictionText = document.getElementById('predictionText');
+            const confidenceFill = document.getElementById('confidenceFill');
+
+            // Set prediction result
+            const isHateSpeech = data.prediction === 'Hate Speech';
+            
+            if (isHateSpeech) {
+                resultIcon.className = 'result-icon icon-danger';
+                resultIcon.textContent = '⚠️';
+                predictionText.textContent = 'Hate Speech Detected';
+                confidenceFill.className = 'confidence-fill confidence-danger';
+            } else {
+                resultIcon.className = 'result-icon icon-safe';
+                resultIcon.textContent = '✅';
+                predictionText.textContent = 'Safe Content';
+                confidenceFill.className = 'confidence-fill confidence-safe';
+            }
+
+            // Set confidence bar
+            const confidence = Math.round(data.confidence * 100);
+            confidenceFill.style.width = confidence + '%';
+            confidenceFill.textContent = confidence + '%';
+
+            // Set detailed metrics
+            document.getElementById('hateProb').textContent = 
+                Math.round(data.hate_probability * 100) + '%';
+            
+            // Sentiment analysis
+            const sentiment = data.linguistic_features?.sentiment_polarity || 0;
+            let sentimentText = 'Neutral';
+            if (sentiment > 0.1) sentimentText = 'Positive';
+            else if (sentiment < -0.1) sentimentText = 'Negative';
+            document.getElementById('sentiment').textContent = sentimentText;
+            
+            document.getElementById('wordCount').textContent = 
+                data.linguistic_features?.word_count || 0;
+            
+            document.getElementById('capsRatio').textContent = 
+                Math.round((data.linguistic_features?.caps_ratio || 0) * 100) + '%';
+
+            // Individual model predictions
+            const modelPredictions = document.getElementById('modelPredictions');
+            if (data.individual_models) {
+                let modelsHTML = '';
+                for (const [modelName, modelData] of Object.entries(data.individual_models)) {
+                    const modelConfidence = Math.round(modelData.confidence * 100);
+                    const modelPrediction = modelData.prediction === 1 ? 'Hate' : 'Safe';
+                    modelsHTML += `
+                        <div class="detail-item">
+                            <div class="detail-value">${modelPrediction}</div>
+                            <div class="detail-label">${modelName} (${modelConfidence}%)</div>
+                        </div>
+                    `;
+                }
+                modelPredictions.innerHTML = `<div class="details-grid">${modelsHTML}</div>`;
+            }
+
+            resultsDiv.classList.remove('hidden');
+        }
+
+        function clearResults() {
+            document.getElementById('textInput').value = '';
+            document.getElementById('results').classList.add('hidden');
+            lastPrediction = null;
+            lastText = null;
+        }
+
+        async function trainModel() {
+            if (!confirm('This will start training the model with multiple datasets. It may take several minutes. Continue?')) {
+                return;
+            }
+
+            document.getElementById('trainBtn').disabled = true;
+            document.getElementById('trainBtn').textContent = '🔄 Training...';
+
+            try {
+                const response = await fetch('/train', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    alert('Training started! The model will be ready in a few minutes. Check the status indicator.');
+                    // Start checking status
+                    setTimeout(checkModelStatus, 5000);
+                } else {
+                    alert('Training failed: ' + data.message);
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error starting training: ' + error.message);
+            } finally {
+                document.getElementById('trainBtn').disabled = false;
+                document.getElementById('trainBtn').textContent = '🏋️ Train Model';
+            }
+        }
+
+        async function submitFeedback(isCorrect) {
+            if (!lastPrediction || !lastText) {
+                alert('No prediction to provide feedback for');
+                return;
+            }
+
+            try {
+                const actualLabel = isCorrect ? 
+                    (lastPrediction.prediction === 'Hate Speech' ? 1 : 0) :
+                    (lastPrediction.prediction === 'Hate Speech' ? 0 : 1);
+
+                const response = await fetch('/feedback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: lastText,
+                        prediction: lastPrediction.prediction,
+                        actual_label: actualLabel
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.status === 'feedback recorded') {
+                    alert('Thank you for your feedback! This helps improve the model.');
+                    document.getElementById('feedbackSection').style.display = 'none';
+                } else {
+                    alert('Error submitting feedback');
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error submitting feedback: ' + error.message);
+            }
+        }
+
+        // Add keyboard shortcut for analyze
+        document.getElementById('textInput').addEventListener('keydown', function(event) {
+            if (event.ctrlKey && event.key === 'Enter') {
+                analyzeText();
+            }
+        });
+
+        // Character counter
+        document.getElementById('textInput').addEventListener('input', function() {
+            const text = this.value;
+            const remaining = 2000 - text.length;
+            
+            // You can add a character counter here if needed
+            if (remaining < 100) {
+                this.style.borderColor = '#ff6b6b';
+            } else {
+                this.style.borderColor = '#e0e0e0';
+            }
+        });
+    </script>
+</body>
+</html>
