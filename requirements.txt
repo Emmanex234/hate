@@ -15,7 +15,7 @@ scikit-learn==1.4.0 ; python_version < '3.13'
 
 # NLP & Text Processing
 textblob==0.17.1
-nltk==3.8.1
+nltk==3.9
 
 # Model & Data Management
 kagglehub==0.2.5
