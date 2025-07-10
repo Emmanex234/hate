@@ -1,0 +1,5 @@
+build:
+  commands:
+    - pip install --upgrade pip setuptools wheel
+    - pip install cython==3.0.7
+    - pip install --no-build-isolation -r requirements.txt
