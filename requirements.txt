@@ -1,35 +1,22 @@
-# Core Flask & Web
+# Core Flask dependencies
 Flask==3.0.0
 Flask-CORS==4.0.0
 gunicorn==21.2.0
 
-# Data Science (Pre-built wheels only)
-numpy==1.26.2 ; python_version >= '3.13'
-pandas==2.2.1 ; python_version >= '3.13'
-scipy==1.12.0 ; python_version >= '3.13'
-scikit-learn==1.4.0 ; python_version >= '3.13'
-numpy==1.26.0 ; python_version < '3.13'
-pandas==2.2.0 ; python_version < '3.13'
-scipy==1.11.4 ; python_version < '3.13'
-scikit-learn==1.4.0 ; python_version < '3.13'
+# Updated numpy version for better compatibility
+numpy>=1.24.0,<2.0.0
 
-# NLP & Text Processing
-textblob==0.17.1
-nltk==3.8.1
+# Machine Learning dependencies
+scikit-learn>=1.3.0,<2.0.0
+pandas>=2.0.0,<3.0.0
 
-# Model & Data Management
-kagglehub==0.2.5
-joblib==1.3.2  # Required for scikit-learn serialization
+# Text processing
+textblob>=0.17.1
 
-# Utilities
-python-dateutil==2.8.2
-pytz==2023.3
-typing-extensions==4.9.0  # Better type hints
+# Data handling
+kagglehub>=0.2.0
 
-# Performance Monitoring
-psutil==5.9.6
-memory-profiler==0.61.0
-
-# Development (Optional)
-pytest==7.4.3
-pytest-flask==1.3.0
+# Build dependencies (add these to fix the build issues)
+setuptools>=65.0.0
+wheel>=0.38.0
+Cython>=0.29.0
