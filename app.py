@@ -6,13 +6,12 @@ from flask_cors import CORS
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
-from sklearn.ensemble import VotingClassifier
+from sklearn.ensemble import VotingClassifier, RandomForestClassifier
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score, precision_recall_fscore_support
 import re
 import string
 import pickle
-import kagglehub
 import logging
 from threading import Thread
 import time
@@ -23,6 +22,19 @@ from functools import wraps
 from textblob import TextBlob
 import warnings
 warnings.filterwarnings('ignore')
+
+# Remove old model file if exists
+# if os.path.exists('nigerian_hate_speech_model.pkl'):
+#     os.remove('nigerian_hate_speech_model.pkl')
+
+# Kaggle API imports
+try:
+    from kaggle.api.kaggle_api_extended import KaggleApi
+    import kagglehub
+    KAGGLE_AVAILABLE = True
+except ImportError:
+    KAGGLE_AVAILABLE = False
+    print("Kaggle API not available. Install with: pip install kaggle")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -49,9 +61,7 @@ def monitor_performance(func):
         end_time = time.time()
         
         # Log metrics
-        logger.info(f"Function: {func.__name__}")
-        logger.info(f"Duration: {end_time - start_time:.4f}s")
-        logger.info(f"Success: {success}")
+        logger.info(f"Function: {func.__name__} - Duration: {end_time - start_time:.2f}s - Success: {success}")
         
         if success:
             return result
@@ -59,482 +69,417 @@ def monitor_performance(func):
             raise Exception(error)
     return wrapper
 
-class AdvancedHateSpeechDetector:
+class OptimizedNigerianHateSpeechDetector:
     def __init__(self):
-        # Environment configuration
+        # Environment configuration - OPTIMIZED
         self.environment = os.environ.get('ENVIRONMENT', 'render_free')
-        self.config = self.load_config()
+        self.config = self.load_optimized_config()
         
-        # Multiple models for ensemble
-        self.models = {
-            'tfidf_lr': LogisticRegression(random_state=42, max_iter=1000),
-            'tfidf_svm': SVC(probability=True, random_state=42),
-        }
+        # Initialize Kaggle API
+        self.kaggle_api = None
+        self.setup_kaggle_api()
         
-        # Vectorizers
-        self.vectorizers = {
-            'tfidf': TfidfVectorizer(
-                max_features=self.config['max_features'],
-                stop_words='english',
-                lowercase=True,
-                ngram_range=(1, 3),
-                max_df=0.95,
-                min_df=2
-            )
-        }
+        # OPTIMIZED: Single fast model instead of ensemble for speed
+        self.model = LogisticRegression(
+            random_state=42, 
+            max_iter=500,  # Reduced iterations
+            C=1.0,
+            solver='liblinear'  # Faster solver
+        )
         
-        # Ensemble weights
-        self.ensemble_weights = [0.6, 0.4]  # LR gets more weight
+        # OPTIMIZED: Smaller, faster vectorizer
+        self.vectorizer = TfidfVectorizer(
+            max_features=self.config['max_features'],
+            stop_words='english',
+            lowercase=True,
+            ngram_range=(1, 2),  # Reduced from (1,3) for speed
+            max_df=0.9,  # Less restrictive
+            min_df=3,    # Higher min_df for speed
+            analyzer='word',
+            token_pattern=r'\b[a-zA-Z][a-zA-Z]+\b'
+        )
         
         self.is_trained = False
         self.training_in_progress = False
         self.feedback_buffer = []
-        self.retrain_threshold = 100
         self.performance_metrics = {}
         
-        # Multiple datasets configuration
-        self.datasets = [
+        # OPTIMIZED: Reduced dataset list for faster training
+        self.dataset_info = [
             {
                 'name': 'nigerian_multilingual',
                 'kaggle_id': 'sharonibejih/nigerian-multilingual-hate-speech',
-                'primary': True
-            },
-            {
-                'name': 'hate_speech_detection',
-                'kaggle_id': 'mrmorj/hate-speech-and-offensive-language-detection',
-                'primary': False
-            },
-            {
-                'name': 'twitter_hate_speech',
-                'kaggle_id': 'arkhoshghalb/twitter-sentiment-analysis-hatred-speech',
-                'primary': False
-            },
-            {
-                'name': 'cyberbullying_detection',
-                'kaggle_id': 'andrewmvd/cyberbullying-classification',
-                'primary': False
+                'description': 'Nigerian Multilingual Hate Speech Dataset'
             }
         ]
         
-    def load_config(self):
-        """Load environment-specific configuration"""
-        if self.environment == 'production':
-            return {
-                'max_features': 10000,
-                'use_ensemble': True,
-                'retrain_frequency': 'weekly'
-            }
-        elif self.environment == 'render_free':
-            return {
-                'max_features': 3000,
-                'use_ensemble': True,
-                'retrain_frequency': 'manual'
-            }
-        else:  # development
-            return {
-                'max_features': 5000,
-                'use_ensemble': True,
-                'retrain_frequency': 'daily'
-            }
+        # Enhanced Nigerian-specific hate patterns for better detection
+        self.nigerian_hate_patterns = [
+            # Common Nigerian hate words/phrases
+            r'\b(mumu|oloshi|werey|yeye|ashawo|bastard|fool|idiot|stupid|useless)\b',
+            r'\b(thief|ole|barawo|419|fraudster|yahoo\s+boy|scammer)\b',
+            r'\b(kill|die|death|destroy|attack|fight)\s+(you|them|him|her)',
+            r'\b(bloody|fucking|fuck|shit|damn)\s+\w+',
+            r'\b(hate|detest|despise)\s+(you|them|all)',
+            r'\b(go\s+to\s+hell|go\s+die|drop\s+dead)',
+            r'\b(tribalist|ethnic)\s+(hate|fight|kill)',
+            r'\b(animal|dog|goat|monkey|pig)\s+(person|people|you)',
+            r'\b(mad|crazy|mental|psycho)\s+(person|man|woman|you)',
+            r'\b(worthless|good\s+for\s+nothing|failure|loser)\b',
+            # Nigerian pidgin hate expressions
+            r'\bwetin\s+(dey\s+)?wrong\s+with\s+you\b',
+            r'\byou\s+no\s+get\s+sense\b',
+            r'\bcraze\s+(person|man|woman)\b',
+            r'\bgo\s+hug\s+transformer\b',
+            r'\bdie\s+there\b'
+        ]
+        
+        # Compile patterns for faster matching
+        self.compiled_patterns = [re.compile(pattern, re.IGNORECASE) for pattern in self.nigerian_hate_patterns]
+        
+        # Enhanced hate word dictionary for instant detection
+        self.hate_words_set = set([
+            'mumu', 'oloshi', 'werey', 'yeye', 'ashawo', 'bastard', 'fool', 'idiot', 
+            'stupid', 'useless', 'thief', 'ole', 'barawo', '419', 'fraudster', 
+            'scammer', 'bloody', 'fucking', 'fuck', 'shit', 'damn', 'hate', 
+            'kill', 'die', 'death', 'destroy', 'attack', 'fight', 'mad', 'crazy', 
+            'mental', 'psycho', 'worthless', 'failure', 'loser', 'animal', 'dog', 
+            'goat', 'monkey', 'pig'
+        ])
+        
+    def load_optimized_config(self):
+        """Load optimized configuration for faster training"""
+        return {
+            'max_features': 3000,  # Reduced from 5000+ for speed
+            'max_samples': 15000,   # Limit dataset size for speed
+            'use_ensemble': False,  # Single model for speed
+        }
+    
+    def setup_kaggle_api(self):
+        """Setup Kaggle API with authentication"""
+        if not KAGGLE_AVAILABLE:
+            logger.error("Kaggle API not available")
+            return False
+            
+        try:
+            self.kaggle_api = KaggleApi()
+            
+            # Check for API credentials
+            if not os.path.exists(os.path.expanduser('~/.kaggle/kaggle.json')):
+                # Try to create from environment variables
+                kaggle_username = os.environ.get('KAGGLE_USERNAME')
+                kaggle_key = os.environ.get('KAGGLE_KEY')
+                
+                if kaggle_username and kaggle_key:
+                    # Create .kaggle directory
+                    kaggle_dir = os.path.expanduser('~/.kaggle')
+                    os.makedirs(kaggle_dir, exist_ok=True)
+                    
+                    # Create kaggle.json
+                    kaggle_config = {
+                        "username": kaggle_username,
+                        "key": kaggle_key
+                    }
+                    
+                    with open(os.path.join(kaggle_dir, 'kaggle.json'), 'w') as f:
+                        json.dump(kaggle_config, f)
+                    
+                    # Set correct permissions
+                    os.chmod(os.path.join(kaggle_dir, 'kaggle.json'), 0o600)
+                    logger.info("Created Kaggle API credentials from environment variables")
+                else:
+                    logger.error("No Kaggle API credentials found")
+                    return False
+            
+            # Authenticate
+            self.kaggle_api.authenticate()
+            logger.info("Kaggle API authenticated successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error setting up Kaggle API: {e}")
+            return False
     
     @monitor_performance
-    def advanced_preprocess_text(self, text):
-        """Enhanced preprocessing with context preservation"""
-        if pd.isna(text):
-            return {"text": "", "features": {}}
+    def fast_preprocess_text(self, text):
+        """Optimized preprocessing for speed"""
+        if pd.isna(text) or not text:
+            return ""
         
         try:
-            # Store original for analysis
-            original_text = str(text)
+            text = str(text).lower().strip()
             
-            # Normalize unicode
-            text = unicodedata.normalize('NFKD', text)
+            # Quick hate word detection
+            words = text.split()
+            hate_word_count = sum(1 for word in words if word in self.hate_words_set)
             
-            # Extract features before cleaning
-            features = {
-                'original_length': len(original_text),
-                'exclamation_count': text.count('!'),
-                'question_count': text.count('?'),
-                'caps_ratio': sum(1 for c in text if c.isupper()) / len(text) if text else 0,
-                'has_urls': bool(re.search(r'http|www', text)),
-                'has_mentions': bool(re.search(r'@\w+', text)),
-                'has_hashtags': bool(re.search(r'#\w+', text)),
-                'repeated_chars': len(re.findall(r'(.)\1{2,}', text)),
-                'word_count': len(text.split()),
-            }
+            # Quick pattern matching
+            pattern_matches = sum(1 for pattern in self.compiled_patterns[:5] if pattern.search(text))  # Check only first 5 patterns for speed
             
-            # Sentiment analysis
-            try:
-                blob = TextBlob(text)
-                features['sentiment_polarity'] = blob.sentiment.polarity
-                features['sentiment_subjectivity'] = blob.sentiment.subjectivity
-            except:
-                features['sentiment_polarity'] = 0
-                features['sentiment_subjectivity'] = 0
-            
-            # Advanced cleaning
-            text = str(text).lower()
-            
-            # Remove URLs but preserve the fact they existed
-            text = re.sub(r'http\S+|www\S+|https\S+', ' URL ', text, flags=re.MULTILINE)
-            
-            # Replace mentions and hashtags with placeholders
-            text = re.sub(r'@\w+', ' MENTION ', text)
-            text = re.sub(r'#\w+', ' HASHTAG ', text)
-            
-            # Handle repeated characters (hateeeee -> hate)
-            text = re.sub(r'(.)\1{2,}', r'\1\1', text)
-            
-            # Remove punctuation but keep sentence structure
+            # Basic cleaning
+            text = re.sub(r'http\S+|www\S+|https\S+', ' ', text)
+            text = re.sub(r'@\w+|#\w+', ' ', text)
+            text = re.sub(r'(.)\1{2,}', r'\1', text)  # Remove repeated chars
             text = re.sub(r'[^\w\s]', ' ', text)
-            
-            # Remove extra whitespace
             text = ' '.join(text.split())
             
-            return {"text": text, "features": features}
+            # Store hate indicators for quick prediction
+            self._hate_indicators = hate_word_count + pattern_matches
+            
+            return text
             
         except Exception as e:
             logger.error(f"Error in preprocessing: {e}")
-            return {"text": "", "features": {}}
+            return ""
     
     @monitor_performance
-    def load_multiple_datasets(self):
-        """Load and combine multiple hate speech datasets"""
-        combined_data = []
-        successful_datasets = []
-        
-        for dataset_info in self.datasets:
-            try:
-                logger.info(f"Attempting to load dataset: {dataset_info['name']}")
-                
-                # Download dataset
-                path = kagglehub.dataset_download(dataset_info['kaggle_id'])
-                logger.info(f"Dataset {dataset_info['name']} downloaded to: {path}")
-                
-                # Find CSV files
-                csv_files = []
-                for root, dirs, files in os.walk(path):
-                    for file in files:
-                        if file.endswith('.csv'):
-                            csv_files.append(os.path.join(root, file))
-                
-                if not csv_files:
-                    logger.warning(f"No CSV files found for {dataset_info['name']}")
-                    continue
-                
-                # Load and process each CSV
-                for csv_file in csv_files:
-                    try:
-                        df = pd.read_csv(csv_file, encoding='utf-8')
-                        if df.empty:
-                            continue
-                            
-                        logger.info(f"Loaded {dataset_info['name']} with shape: {df.shape}")
-                        
-                        # Normalize dataset format
-                        normalized_df = self.normalize_dataset_format(df, dataset_info['name'])
-                        
-                        if normalized_df is not None and not normalized_df.empty:
-                            # Sample data for memory efficiency
-                            max_samples = 5000 if dataset_info['primary'] else 2000
-                            if len(normalized_df) > max_samples:
-                                normalized_df = normalized_df.sample(n=max_samples, random_state=42)
-                            
-                            normalized_df['dataset_source'] = dataset_info['name']
-                            combined_data.append(normalized_df)
-                            successful_datasets.append(dataset_info['name'])
-                            logger.info(f"Successfully processed {dataset_info['name']}: {len(normalized_df)} samples")
-                            
-                    except Exception as e:
-                        logger.error(f"Error processing CSV {csv_file}: {e}")
-                        continue
-                        
-            except Exception as e:
-                logger.error(f"Error loading dataset {dataset_info['name']}: {e}")
-                continue
-        
-        if combined_data:
-            final_df = pd.concat(combined_data, ignore_index=True)
-            logger.info(f"Combined dataset shape: {final_df.shape}")
-            logger.info(f"Successfully loaded datasets: {successful_datasets}")
-            logger.info(f"Label distribution: {final_df['label'].value_counts().to_dict()}")
-            return final_df
-        else:
-            logger.error("No datasets could be loaded successfully")
+    def download_dataset(self, dataset_info):
+        """Optimized dataset download"""
+        if not self.kaggle_api:
+            logger.error("Kaggle API not initialized")
             return None
-    
-    def normalize_dataset_format(self, df, dataset_name):
-        """Normalize different dataset formats to standard format"""
+            
         try:
-            # Define column mappings for different datasets
-            text_columns = [col for col in df.columns if any(keyword in col.lower() 
-                          for keyword in ['text', 'tweet', 'comment', 'content', 'message'])]
+            dataset_name = dataset_info['kaggle_id']
+            download_path = f'./{dataset_info["name"]}_dataset'
             
-            label_columns = [col for col in df.columns if any(keyword in col.lower() 
-                           for keyword in ['label', 'hate', 'class', 'target', 'category'])]
+            logger.info(f"Downloading dataset: {dataset_name}")
             
-            if not text_columns or not label_columns:
-                # Try to infer from column positions
-                if len(df.columns) >= 2:
-                    text_col = df.columns[0]
-                    label_col = df.columns[-1]  # Often the last column
-                else:
-                    return None
-            else:
-                text_col = text_columns[0]
-                label_col = label_columns[0]
+            os.makedirs(download_path, exist_ok=True)
             
-            # Create normalized dataframe
-            normalized_df = pd.DataFrame()
-            normalized_df['text'] = df[text_col]
-            normalized_df['original_label'] = df[label_col]
+            self.kaggle_api.dataset_download_files(
+                dataset_name, 
+                path=download_path, 
+                unzip=True
+            )
             
-            # Normalize labels to binary (0: not hate, 1: hate)
-            normalized_df['label'] = self.normalize_labels(df[label_col], dataset_name)
+            # Find CSV files
+            csv_files = []
+            for root, dirs, files in os.walk(download_path):
+                for file in files:
+                    if file.endswith('.csv'):
+                        csv_files.append(os.path.join(root, file))
             
-            # Remove rows with missing values
-            normalized_df = normalized_df.dropna()
-            
-            # Remove empty texts
-            normalized_df = normalized_df[normalized_df['text'].str.len() > 0]
-            
-            # Ensure balanced dataset (optional)
-            if len(normalized_df['label'].unique()) == 2:
-                # Balance the dataset if too imbalanced
-                label_counts = normalized_df['label'].value_counts()
-                min_count = min(label_counts.values)
-                max_count = max(label_counts.values)
-                
-                if max_count > min_count * 3:  # If more than 3:1 ratio
-                    balanced_df = normalized_df.groupby('label').apply(
-                        lambda x: x.sample(min(len(x), min_count * 2), random_state=42)
-                    ).reset_index(drop=True)
-                    return balanced_df
-            
-            return normalized_df
+            logger.info(f"Found CSV files: {csv_files}")
+            return csv_files
             
         except Exception as e:
-            logger.error(f"Error normalizing dataset {dataset_name}: {e}")
+            logger.error(f"Error downloading dataset: {e}")
             return None
     
-    def normalize_labels(self, labels, dataset_name):
-        """Convert various label formats to binary"""
+    @monitor_performance
+    def load_and_process_dataset(self):
+        """Optimized dataset loading and processing"""
+        try:
+            # Download dataset
+            csv_files = self.download_dataset(self.dataset_info[0])
+            
+            if not csv_files:
+                logger.error("Failed to download dataset")
+                return None
+            
+            # Load first CSV file
+            csv_file = csv_files[0]
+            
+            # Try different encodings
+            for encoding in ['utf-8', 'latin-1', 'iso-8859-1']:
+                try:
+                    df = pd.read_csv(csv_file, encoding=encoding)
+                    logger.info(f"Loaded {csv_file} with {encoding} encoding")
+                    break
+                except UnicodeDecodeError:
+                    continue
+            else:
+                logger.error(f"Could not read {csv_file}")
+                return None
+            
+            logger.info(f"Dataset shape: {df.shape}")
+            logger.info(f"Columns: {df.columns.tolist()}")
+            
+            # Find text and label columns
+            text_col = None
+            label_col = None
+            
+            for col in df.columns:
+                col_lower = col.lower()
+                if any(keyword in col_lower for keyword in ['text', 'tweet', 'content', 'sentence', 'message']):
+                    text_col = col
+                elif any(keyword in col_lower for keyword in ['label', 'class', 'hate', 'target']):
+                    label_col = col
+            
+            if not text_col:
+                text_col = df.columns[0]
+            if not label_col:
+                label_col = df.columns[-1]
+                
+            logger.info(f"Using text column: {text_col}, label column: {label_col}")
+            
+            # Create normalized dataframe
+            processed_df = pd.DataFrame()
+            processed_df['text'] = df[text_col].astype(str)
+            processed_df['original_label'] = df[label_col]
+            
+            # Normalize labels to binary
+            processed_df['label'] = self.normalize_labels(df[label_col])
+            
+            # Remove invalid data
+            processed_df = processed_df.dropna()
+            processed_df = processed_df[processed_df['text'].str.len() > 5]
+            
+            # OPTIMIZATION: Limit dataset size for faster training
+            if len(processed_df) > self.config['max_samples']:
+                # Keep balanced sample
+                hate_samples = processed_df[processed_df['label'] == 1]
+                non_hate_samples = processed_df[processed_df['label'] == 0]
+                
+                max_per_class = self.config['max_samples'] // 2
+                
+                if len(hate_samples) > max_per_class:
+                    hate_samples = hate_samples.sample(max_per_class, random_state=42)
+                if len(non_hate_samples) > max_per_class:
+                    non_hate_samples = non_hate_samples.sample(max_per_class, random_state=42)
+                
+                processed_df = pd.concat([hate_samples, non_hate_samples], ignore_index=True)
+                processed_df = processed_df.sample(frac=1, random_state=42).reset_index(drop=True)
+            
+            logger.info(f"Final dataset shape: {processed_df.shape}")
+            logger.info(f"Label distribution: {processed_df['label'].value_counts().to_dict()}")
+            
+            return processed_df
+            
+        except Exception as e:
+            logger.error(f"Error processing dataset: {e}")
+            return None
+    
+    def normalize_labels(self, labels):
+        """Fast label normalization"""
         try:
             if labels.dtype == 'object':
-                unique_labels = labels.unique()
-                logger.info(f"Dataset {dataset_name} unique labels: {unique_labels}")
+                # String labels
+                hate_indicators = ['hate', 'hateful', 'offensive', 'abusive', 'toxic', '1', 'yes', 'true']
                 
-                # Define hate speech indicators
-                hate_indicators = [
-                    'hate', 'hateful', 'offensive', 'abusive', 'toxic', 'harassment',
-                    'bullying', 'spam', 'threat', '1', 'yes', 'true', 'positive'
-                ]
-                
-                def is_hate_speech(label):
+                def is_hate(label):
+                    if pd.isna(label):
+                        return 0
                     label_str = str(label).lower().strip()
-                    return any(indicator in label_str for indicator in hate_indicators)
+                    return int(any(indicator in label_str for indicator in hate_indicators))
                 
-                return labels.apply(lambda x: 1 if is_hate_speech(x) else 0)
+                return labels.apply(is_hate)
             else:
                 # Numeric labels
                 unique_vals = sorted(labels.unique())
                 if len(unique_vals) == 2:
-                    # Binary: map to 0,1
-                    return labels.map({unique_vals[0]: 0, unique_vals[1]: 1})
+                    min_val, max_val = min(unique_vals), max(unique_vals)
+                    return labels.map({min_val: 0, max_val: 1})
                 else:
-                    # Multi-class: assume 0 is non-hate, others are hate
                     return (labels != 0).astype(int)
                     
         except Exception as e:
-            logger.error(f"Error normalizing labels for {dataset_name}: {e}")
-            return labels
+            logger.error(f"Error normalizing labels: {e}")
+            return pd.Series([0] * len(labels))
     
     @monitor_performance
-    def extract_advanced_features(self, processed_data):
-        """Extract multiple feature types"""
-        try:
-            # Text features
-            texts = [item['text'] for item in processed_data]
-            
-            # TF-IDF features
-            tfidf_features = self.vectorizers['tfidf'].transform(texts)
-            
-            # Linguistic features
-            linguistic_features = []
-            for item in processed_data:
-                features = item['features']
-                feature_vec = [
-                    features.get('original_length', 0),
-                    features.get('exclamation_count', 0),
-                    features.get('question_count', 0),
-                    features.get('caps_ratio', 0),
-                    features.get('has_urls', 0),
-                    features.get('has_mentions', 0),
-                    features.get('has_hashtags', 0),
-                    features.get('repeated_chars', 0),
-                    features.get('word_count', 0),
-                    features.get('sentiment_polarity', 0),
-                    features.get('sentiment_subjectivity', 0),
-                ]
-                linguistic_features.append(feature_vec)
-            
-            linguistic_features = np.array(linguistic_features)
-            
-            # Combine features
-            from scipy.sparse import hstack, csr_matrix
-            combined_features = hstack([
-                tfidf_features,
-                csr_matrix(linguistic_features)
-            ])
-            
-            return combined_features
-            
-        except Exception as e:
-            logger.error(f"Error extracting features: {e}")
-            return None
-    
-    @monitor_performance
-    def train_ensemble_model(self, X_train, y_train):
-        """Train ensemble of models"""
-        try:
-            # Train individual models
-            trained_models = []
-            
-            for name, model in self.models.items():
-                logger.info(f"Training {name}...")
-                model.fit(X_train, y_train)
-                trained_models.append((name, model))
-            
-            # Create ensemble
-            self.ensemble = VotingClassifier(
-                estimators=trained_models,
-                voting='soft'  # Use probabilities
-            )
-            
-            self.ensemble.fit(X_train, y_train)
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error training ensemble: {e}")
-            return False
-    
-    @monitor_performance
-    def comprehensive_evaluation(self, X_test, y_test):
-        """Detailed model evaluation"""
-        try:
-            predictions = self.ensemble.predict(X_test)
-            probabilities = self.ensemble.predict_proba(X_test)
-            
-            metrics = {
-                'accuracy': accuracy_score(y_test, predictions),
-                'precision': precision_recall_fscore_support(y_test, predictions, average='weighted')[0],
-                'recall': precision_recall_fscore_support(y_test, predictions, average='weighted')[1],
-                'f1': precision_recall_fscore_support(y_test, predictions, average='weighted')[2],
-                'confusion_matrix': confusion_matrix(y_test, predictions).tolist(),
-                'classification_report': classification_report(y_test, predictions, output_dict=True)
-            }
-            
-            # AUC score
-            if len(np.unique(y_test)) == 2:
-                metrics['auc_roc'] = roc_auc_score(y_test, probabilities[:, 1])
-            
-            # Individual model performance
-            for name, model in self.models.items():
-                model_pred = model.predict(X_test)
-                metrics[f'{name}_accuracy'] = accuracy_score(y_test, model_pred)
-            
-            self.performance_metrics = metrics
-            return metrics
-            
-        except Exception as e:
-            logger.error(f"Error in evaluation: {e}")
-            return {"error": str(e)}
-    
-    @monitor_performance
-    def load_and_train_model(self):
-        """Main training function with multiple datasets"""
+    def train_optimized_model(self):
+        """Fast training with optimizations"""
         try:
             self.training_in_progress = True
-            logger.info("Starting advanced model training with multiple datasets...")
+            logger.info("Starting optimized Nigerian hate speech model training...")
             
-            # Load multiple datasets
-            df = self.load_multiple_datasets()
+            # Load and process dataset
+            df = self.load_and_process_dataset()
             
             if df is None or df.empty:
-                raise ValueError("No datasets could be loaded")
+                raise ValueError("Could not load dataset")
             
-            # Preprocess all texts
+            # Fast preprocessing
             logger.info("Preprocessing texts...")
-            processed_data = []
-            for text in df['text']:
-                processed = self.advanced_preprocess_text(text)
-                processed_data.append(processed)
+            texts = []
+            labels = []
             
-            # Fit vectorizer on processed texts
-            texts = [item['text'] for item in processed_data if item['text']]
-            logger.info(f"Fitting vectorizer on {len(texts)} texts...")
-            self.vectorizers['tfidf'].fit(texts)
+            for idx, row in df.iterrows():
+                processed_text = self.fast_preprocess_text(row['text'])
+                if processed_text:  # Only keep non-empty texts
+                    texts.append(processed_text)
+                    labels.append(row['label'])
             
-            # Extract features
-            logger.info("Extracting advanced features...")
-            X = self.extract_advanced_features(processed_data)
-            y = df['label'].values
+            logger.info(f"Processed {len(texts)} valid texts")
             
-            if X is None:
-                raise ValueError("Feature extraction failed")
+            if len(texts) < 100:
+                raise ValueError("Not enough valid texts for training")
+            
+            # Fit vectorizer and transform texts
+            logger.info("Vectorizing texts...")
+            X = self.vectorizer.fit_transform(texts)
+            y = np.array(labels)
+            
+            logger.info(f"Feature matrix shape: {X.shape}")
+            logger.info(f"Label distribution: {np.bincount(y)}")
             
             # Split data
             X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=0.2, random_state=42, stratify=y
             )
             
-            logger.info(f"Training set size: {X_train.shape}")
-            logger.info(f"Test set size: {X_test.shape}")
+            # Train model
+            logger.info("Training model...")
+            self.model.fit(X_train, y_train)
             
-            # Train ensemble model
-            success = self.train_ensemble_model(X_train, y_train)
-            
-            if not success:
-                raise ValueError("Ensemble training failed")
-            
-            # Evaluate model
+            # Evaluate
             logger.info("Evaluating model...")
-            metrics = self.comprehensive_evaluation(X_test, y_test)
+            y_pred = self.model.predict(X_test)
+            y_prob = self.model.predict_proba(X_test)[:, 1]
             
-            logger.info(f"Model training completed!")
-            logger.info(f"Accuracy: {metrics.get('accuracy', 'N/A'):.4f}")
-            logger.info(f"F1-Score: {metrics.get('f1', 'N/A'):.4f}")
+            # Calculate metrics
+            accuracy = accuracy_score(y_test, y_pred)
+            precision, recall, f1, _ = precision_recall_fscore_support(y_test, y_pred, average='weighted')
+            
+            self.performance_metrics = {
+                'accuracy': accuracy,
+                'precision': precision,
+                'recall': recall,
+                'f1': f1,
+                'confusion_matrix': confusion_matrix(y_test, y_pred).tolist(),
+                'training_samples': len(texts),
+                'test_samples': len(y_test),
+                'vocabulary_size': X.shape[1]
+            }
+            
+            if len(np.unique(y_test)) == 2:
+                self.performance_metrics['auc_roc'] = roc_auc_score(y_test, y_prob)
+            
+            logger.info(f"Training completed!")
+            logger.info(f"Accuracy: {accuracy:.4f}")
+            logger.info(f"F1-Score: {f1:.4f}")
             
             self.is_trained = True
-            
-            # Save model
             self.save_model()
             
-            return metrics
+            return self.performance_metrics
             
         except Exception as e:
-            logger.error(f"Error in training: {str(e)}")
+            logger.error(f"Training error: {str(e)}")
             return {"error": str(e)}
         finally:
             self.training_in_progress = False
     
     def save_model(self):
-        """Save the trained model and components"""
+        """Save the trained model"""
         try:
             model_data = {
-                'ensemble': self.ensemble,
-                'models': self.models,
-                'vectorizers': self.vectorizers,
+                'model': self.model,
+                'vectorizer': self.vectorizer,
                 'performance_metrics': self.performance_metrics,
                 'config': self.config,
-                'training_timestamp': datetime.now().isoformat()
+                'hate_patterns': self.nigerian_hate_patterns,
+                'hate_words_set': self.hate_words_set,
+                'training_timestamp': datetime.now().isoformat(),
+                'model_version': 'optimized_nigerian_hate_speech_v1'
             }
             
-            with open('advanced_hate_speech_model.pkl', 'wb') as f:
+            with open('nigerian_hate_speech_model.pkl', 'wb') as f:
                 pickle.dump(model_data, f)
             
-            logger.info("Advanced model saved successfully")
+            logger.info("Model saved successfully")
             
         except Exception as e:
             logger.warning(f"Could not save model: {e}")
@@ -542,16 +487,15 @@ class AdvancedHateSpeechDetector:
     def load_model(self):
         """Load a previously saved model"""
         try:
-            with open('advanced_hate_speech_model.pkl', 'rb') as f:
+            with open('nigerian_hate_speech_model.pkl', 'rb') as f:
                 model_data = pickle.load(f)
             
-            self.ensemble = model_data['ensemble']
-            self.models = model_data['models']
-            self.vectorizers = model_data['vectorizers']
+            self.model = model_data['model']
+            self.vectorizer = model_data['vectorizer']
             self.performance_metrics = model_data.get('performance_metrics', {})
             
             self.is_trained = True
-            logger.info("Advanced model loaded successfully")
+            logger.info("Model loaded successfully")
             return True
             
         except FileNotFoundError:
@@ -562,7 +506,7 @@ class AdvancedHateSpeechDetector:
             return False
     
     def predict(self, text):
-        """Predict with enhanced features"""
+        """Fast prediction with enhanced Nigerian hate detection"""
         if not self.is_trained:
             return {"error": "Model not trained yet"}
         
@@ -571,42 +515,47 @@ class AdvancedHateSpeechDetector:
         
         try:
             # Preprocess text
-            processed = self.advanced_preprocess_text(text)
+            processed_text = self.fast_preprocess_text(text)
             
-            if not processed['text']:
-                return {"error": "Text is empty after preprocessing"}
+            if not processed_text:
+                return {
+                    "text": text,
+                    "prediction": "Not Hate Speech",
+                    "confidence": 0.6,
+                    "hate_probability": 0.1,
+                    "reason": "Empty text after preprocessing"
+                }
             
-            # Extract features
-            features = self.extract_advanced_features([processed])
+            # Quick hate detection using patterns
+            hate_indicators = getattr(self, '_hate_indicators', 0)
             
-            if features is None:
-                return {"error": "Feature extraction failed"}
+            # Vectorize and predict
+            text_vector = self.vectorizer.transform([processed_text])
+            prediction = self.model.predict(text_vector)[0]
+            probabilities = self.model.predict_proba(text_vector)[0]
             
-            # Make prediction
-            prediction = self.ensemble.predict(features)[0]
-            probabilities = self.ensemble.predict_proba(features)[0]
+            # Enhanced prediction with pattern matching
+            hate_prob = probabilities[1] if len(probabilities) > 1 else 0.0
             
-            # Get individual model predictions for transparency
-            individual_predictions = {}
-            for name, model in self.models.items():
-                try:
-                    pred = model.predict(features)[0]
-                    prob = model.predict_proba(features)[0]
-                    individual_predictions[name] = {
-                        'prediction': int(pred),
-                        'confidence': float(max(prob))
-                    }
-                except:
-                    pass
+            # Boost confidence for clear hate patterns
+            if hate_indicators > 2:
+                hate_prob = min(hate_prob + 0.3, 0.95)
+                prediction = 1
+            elif hate_indicators > 0:
+                hate_prob = min(hate_prob + 0.1, 0.9)
+            
+            # Final prediction
+            final_prediction = 1 if hate_prob > 0.5 else 0
+            confidence = max(probabilities)
             
             result = {
                 "text": text,
-                "prediction": "Hate Speech" if prediction == 1 else "Not Hate Speech",
-                "confidence": float(max(probabilities)),
-                "hate_probability": float(probabilities[1]) if len(probabilities) > 1 else 0.0,
-                "linguistic_features": processed['features'],
-                "individual_models": individual_predictions,
-                "model_version": "advanced_ensemble"
+                "prediction": "Hate Speech" if final_prediction == 1 else "Not Hate Speech",
+                "confidence": float(confidence),
+                "hate_probability": float(hate_prob),
+                "pattern_matches": int(hate_indicators),
+                "processed_text": processed_text,
+                "model_version": "optimized_nigerian_v1"
             }
             
             return result
@@ -616,7 +565,7 @@ class AdvancedHateSpeechDetector:
             return {"error": f"Prediction error: {str(e)}"}
     
     def predict_batch(self, texts):
-        """Batch prediction for multiple texts"""
+        """Batch prediction"""
         if not self.is_trained:
             return {"error": "Model not trained yet"}
         
@@ -632,35 +581,149 @@ class AdvancedHateSpeechDetector:
             logger.error(f"Batch prediction error: {str(e)}")
             return {"error": f"Batch prediction error: {str(e)}"}
     
-    def collect_feedback(self, text, prediction, user_feedback):
-        """Collect user feedback for model improvement"""
-        self.feedback_buffer.append({
-            'text': text,
-            'predicted': prediction,
-            'actual': user_feedback,
-            'timestamp': datetime.now().isoformat()
-        })
-        
-        logger.info(f"Feedback collected. Buffer size: {len(self.feedback_buffer)}")
-        
-        if len(self.feedback_buffer) >= self.retrain_threshold:
-            logger.info("Feedback threshold reached. Consider retraining.")
-    
     def get_performance_metrics(self):
-        """Get detailed model performance metrics"""
+        """Get model performance metrics"""
         return {
             "performance_metrics": self.performance_metrics,
             "model_status": {
                 "trained": self.is_trained,
                 "training_in_progress": self.training_in_progress,
-                "feedback_buffer_size": len(self.feedback_buffer)
+                "model_version": "optimized_nigerian_v1",
+                "specialized_for": "Nigerian hate speech detection"
             },
             "configuration": self.config
         }
+    
+    def test_nigerian_examples(self):
+        """Test with Nigerian hate speech examples"""
+        test_cases = [
+            # Hate speech examples
+            ("You are a useless mumu person", True),
+            ("This yeye government is nonsense", False),  # Criticism, not hate
+            ("All yoruba people are thieves", True),
+            ("I will kill you bastard", True),
+            ("You oloshi go die there", True),
+            ("Werey person like you", True),
+            ("This ashawo no get sense", True),
+            ("You be bloody fool", True),
+            ("Go hug transformer", True),
+            ("Mad person like you", True),
+            
+            # Non-hate examples
+            ("I love Nigeria and its people", False),
+            ("The weather is beautiful today", False),
+            ("Going to market to buy food", False),
+            ("Education is very important", False),
+            ("Let's work together for peace", False),
+            ("Nigerian music is amazing", False),
+            ("Lagos traffic is crazy", False),  # Common expression, not hate
+            ("This government need to do better", False),  # Criticism
+            ("I dey go church today", False),
+            ("Make we chop rice", False)
+        ]
+        
+        results = []
+        correct_predictions = 0
+        
+        for text, expected_hate in test_cases:
+            prediction_result = self.predict(text)
+            is_hate_predicted = prediction_result.get("prediction") == "Hate Speech"
+            is_correct = is_hate_predicted == expected_hate
+            
+            if is_correct:
+                correct_predictions += 1
+            
+            results.append({
+                "text": text,
+                "expected": "Hate" if expected_hate else "Not Hate",
+                "predicted": prediction_result.get("prediction", "Error"),
+                "confidence": prediction_result.get("confidence", 0),
+                "hate_probability": prediction_result.get("hate_probability", 0),
+                "correct": is_correct
+            })
+        
+        accuracy = correct_predictions / len(test_cases)
+        
+        return {
+            "test_results": results,
+            "accuracy": accuracy,
+            "correct_predictions": f"{correct_predictions}/{len(test_cases)}"
+        }
 
-# Initialize the advanced detector
-detector = AdvancedHateSpeechDetector()
+# Initialize the detector
+detector = OptimizedNigerianHateSpeechDetector()
 
+@app.route('/feedback', methods=['POST'])
+def submit_feedback():
+    """Submit feedback for model predictions - flexible format"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        text = data.get('text', '').strip()
+        if not text:
+            return jsonify({"error": "Empty text provided"}), 400
+        
+        # Handle both old and new formats
+        predicted_label = data.get('predicted_label') or data.get('prediction')
+        actual_label = data.get('actual_label')
+        
+        if not predicted_label:
+            return jsonify({"error": "Missing predicted label"}), 400
+        
+        if actual_label is None:
+            return jsonify({"error": "Missing actual label"}), 400
+        
+        # Convert numeric labels to string format
+        def convert_label(label):
+            if isinstance(label, (int, float)):
+                return "Hate Speech" if label == 1 else "Not Hate Speech"
+            return str(label)
+        
+        predicted_label = convert_label(predicted_label)
+        actual_label = convert_label(actual_label)
+        
+        user_comment = data.get('comment', '')
+        confidence = data.get('confidence', 0)
+        
+        if len(text) > 1000:
+            return jsonify({"error": "Text too long (max 1000 characters)"}), 400
+        
+        # Create feedback entry
+        feedback_entry = {
+            'text': text,
+            'predicted_label': predicted_label,
+            'actual_label': actual_label,
+            'user_comment': user_comment,
+            'confidence': confidence,
+            'timestamp': datetime.now().isoformat(),
+            'model_version': 'optimized_nigerian_v1',
+            'is_correct': predicted_label == actual_label
+        }
+        
+        # Store feedback in buffer
+        detector.feedback_buffer.append(feedback_entry)
+        
+        # Log feedback for analysis
+        logger.info(f"Feedback received - Text: {text[:50]}..., Predicted: {predicted_label}, Actual: {actual_label}")
+        
+        # Keep only last 1000 feedback entries to manage memory
+        if len(detector.feedback_buffer) > 1000:
+            detector.feedback_buffer = detector.feedback_buffer[-1000:]
+        
+        return jsonify({
+            "status": "success",
+            "message": "Feedback submitted successfully",
+            "feedback_id": len(detector.feedback_buffer),
+            "total_feedback": len(detector.feedback_buffer)
+        })
+        
+    except Exception as e:
+        logger.error(f"Feedback submission error: {str(e)}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+    
 # Flask Routes
 @app.route('/')
 def index():
@@ -668,32 +731,38 @@ def index():
 
 @app.route('/health')
 def health_check():
-    """Enhanced health check endpoint"""
     return jsonify({
         "status": "healthy",
         "model_trained": detector.is_trained,
         "training_in_progress": detector.training_in_progress,
-        "model_version": "advanced_ensemble",
-        "environment": detector.environment,
-        "datasets_configured": len(detector.datasets)
+        "model_version": "optimized_nigerian_v1",
+        "specialized_for": "Fast Nigerian hate speech detection",
+        "kaggle_api_available": KAGGLE_AVAILABLE
     })
+
+
 
 @app.route('/train', methods=['POST'])
 def train_model():
-    """Train the advanced model"""
     if detector.training_in_progress:
         return jsonify({
             "status": "error",
             "message": "Training already in progress"
         })
     
+    if not KAGGLE_AVAILABLE:
+        return jsonify({
+            "status": "error",
+            "message": "Kaggle API not available"
+        })
+    
     def train_async():
         try:
-            logger.info("Starting async advanced training...")
-            metrics = detector.load_and_train_model()
+            logger.info("Starting async training...")
+            metrics = detector.train_optimized_model()
             
             if 'error' not in metrics:
-                logger.info("Advanced training completed successfully")
+                logger.info("Training completed successfully")
             else:
                 logger.error(f"Training failed: {metrics['error']}")
                 
@@ -707,13 +776,12 @@ def train_model():
     
     return jsonify({
         "status": "success",
-        "message": "Advanced training started with multiple datasets. Check /status for progress.",
-        "datasets": [d['name'] for d in detector.datasets]
+        "message": "Optimized Nigerian hate speech model training started",
+        "estimated_time": "2-5 minutes"
     })
 
 @app.route('/predict', methods=['POST'])
 def predict_hate_speech():
-    """Enhanced prediction endpoint"""
     try:
         data = request.get_json()
         if not data or 'text' not in data:
@@ -724,8 +792,8 @@ def predict_hate_speech():
         if not text:
             return jsonify({"error": "Empty text provided"}), 400
         
-        if len(text) > 2000:  # Increased limit
-            return jsonify({"error": "Text too long (max 2000 characters)"}), 400
+        if len(text) > 1000:  # Reduced limit for faster processing
+            return jsonify({"error": "Text too long (max 1000 characters)"}), 400
         
         result = detector.predict(text)
         return jsonify(result)
@@ -736,7 +804,6 @@ def predict_hate_speech():
 
 @app.route('/predict/batch', methods=['POST'])
 def predict_batch():
-    """Batch prediction endpoint"""
     try:
         data = request.get_json()
         texts = data.get('texts', [])
@@ -744,8 +811,8 @@ def predict_batch():
         if not texts:
             return jsonify({"error": "No texts provided"}), 400
         
-        if len(texts) > 50:  # Reasonable limit
-            return jsonify({"error": "Too many texts (max 50)"}), 400
+        if len(texts) > 20:  # Reduced for faster processing
+            return jsonify({"error": "Too many texts (max 20)"}), 400
         
         result = detector.predict_batch(texts)
         return jsonify(result)
@@ -754,51 +821,39 @@ def predict_batch():
         logger.error(f"Batch prediction error: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
 
-@app.route('/feedback', methods=['POST'])
-def submit_feedback():
-    """Collect user feedback for model improvement"""
-    try:
-        data = request.get_json()
-        required_fields = ['text', 'prediction', 'actual_label']
-        
-        if not all(field in data for field in required_fields):
-            return jsonify({"error": "Missing required fields"}), 400
-        
-        detector.collect_feedback(
-            data['text'], 
-            data['prediction'], 
-            data['actual_label']
-        )
-        
-        return jsonify({"status": "feedback recorded"})
-        
-    except Exception as e:
-        logger.error(f"Feedback error: {str(e)}")
-        return jsonify({"error": "Internal server error"}), 500
-
 @app.route('/model/metrics')
 def get_model_metrics():
-    """Get detailed model performance metrics"""
     try:
         metrics = detector.get_performance_metrics()
         return jsonify(metrics)
-        
     except Exception as e:
         logger.error(f"Metrics error: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/status')
 def model_status():
-    """Enhanced model status endpoint"""
     return jsonify({
         "trained": detector.is_trained,
         "training_in_progress": detector.training_in_progress,
         "status": "ready" if detector.is_trained else ("training" if detector.training_in_progress else "not trained"),
-        "model_version": "advanced_ensemble",
-        "datasets": [d['name'] for d in detector.datasets],
-        "feedback_buffer_size": len(detector.feedback_buffer),
-        "performance_metrics": detector.performance_metrics
+        "model_version": "optimized_nigerian_v1",
+        "specialized_for": "Fast Nigerian hate speech detection",
+        "performance_metrics": detector.performance_metrics,
+        "kaggle_api_available": KAGGLE_AVAILABLE
     })
+
+@app.route('/test/examples')
+def test_examples():
+    try:
+        if not detector.is_trained:
+            return jsonify({"error": "Model not trained yet"}), 400
+        
+        results = detector.test_nigerian_examples()
+        return jsonify(results)
+        
+    except Exception as e:
+        logger.error(f"Test error: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.errorhandler(404)
 def not_found(error):
@@ -810,24 +865,27 @@ def internal_error(error):
 
 # Auto-train model on startup
 def auto_train_on_startup():
-    """Automatically train model on startup if not already trained"""
-    time.sleep(10)  # Wait longer for app to fully start
-    if not detector.is_trained and not detector.training_in_progress:
+    """Auto-train model on startup if conditions are met"""
+    time.sleep(10)  # Wait for app to start
+    if not detector.is_trained and not detector.training_in_progress and KAGGLE_AVAILABLE:
         try:
-            logger.info("Auto-training advanced model on startup...")
-            detector.load_and_train_model()
+            logger.info("Auto-training optimized model on startup...")
+            detector.train_optimized_model()
         except Exception as e:
             logger.error(f"Auto-training failed: {e}")
 
 if __name__ == '__main__':
     # Try to load existing model first
     if not detector.load_model():
-        logger.info("No existing advanced model found.")
+        logger.info("No existing model found.")
+        
         # Start auto-training in background for production
-        if os.environ.get('RENDER') or os.environ.get('ENVIRONMENT') == 'production':
+        if (os.environ.get('RENDER') or os.environ.get('ENVIRONMENT') == 'production') and KAGGLE_AVAILABLE:
             thread = Thread(target=auto_train_on_startup)
             thread.daemon = True
             thread.start()
+        elif not KAGGLE_AVAILABLE:
+            logger.warning("Kaggle API not available. Cannot download datasets.")
     
     # Get port from environment variable
     port = int(os.environ.get('PORT', 5000))

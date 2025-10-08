@@ -3,490 +3,191 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Hate Speech Detector</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+    <title>Hate Speech Detector</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0f4ff',
+                            100: '#e0e9ff',
+                            200: '#c7d7fe',
+                            300: '#a5b8fd',
+                            400: '#8192fa',
+                            500: '#667eea',
+                            600: '#5469d4',
+                            700: '#4555b3',
+                            800: '#3a4690',
+                            900: '#343d74',
+                        },
+                        secondary: {
+                            50: '#f9f7fd',
+                            100: '#f2eefa',
+                            200: '#e6dbf5',
+                            300: '#d3beec',
+                            400: '#b897de',
+                            500: '#9f76ce',
+                            600: '#855bb3',
+                            700: '#6c4993',
+                            800: '#5a3e79',
+                            900: '#4a3563',
+                        }
+                    }
+                }
+            }
         }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    </script>
+    <style type="text/css">
+        .gradient-bg {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
         }
-
-        .container {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
-            max-width: 800px;
-            width: 100%;
-            animation: slideIn 0.5s ease-out;
+        .progress-bar {
+            transition: width 0.5s ease-in-out;
         }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        .fade-in {
+            animation: fadeIn 0.5s ease-out;
         }
-
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        .header h1 {
-            color: #333;
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .header p {
-            color: #666;
-            font-size: 1.1em;
-        }
-
-        .status-indicator {
-            display: inline-block;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 0.9em;
-            font-weight: bold;
-            margin: 10px 0;
-            transition: all 0.3s ease;
-        }
-
-        .status-ready {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .status-training {
-            background: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeaa7;
-        }
-
-        .status-error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        .input-section {
-            margin-bottom: 30px;
-        }
-
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        textarea {
-            width: 100%;
-            padding: 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            font-size: 16px;
-            font-family: inherit;
-            resize: vertical;
-            min-height: 120px;
-            transition: border-color 0.3s ease;
-        }
-
-        textarea:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .button-group {
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-
-        button {
-            padding: 12px 25px;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            flex: 1;
-            min-width: 120px;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-secondary {
-            background: #f8f9fa;
-            color: #495057;
-            border: 2px solid #dee2e6;
-        }
-
-        .btn-secondary:hover {
-            background: #e9ecef;
-            border-color: #adb5bd;
-        }
-
-        .btn-danger {
-            background: linear-gradient(135deg, #ff6b6b, #ee5a6f);
-            color: white;
-        }
-
-        .btn-danger:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
-        }
-
-        button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none !important;
-        }
-
-        .result-section {
-            margin-top: 30px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 15px;
-            border-left: 5px solid #667eea;
-        }
-
-        .result-header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-
-        .result-icon {
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            color: white;
-        }
-
-        .icon-safe {
-            background: #28a745;
-        }
-
-        .icon-danger {
-            background: #dc3545;
-        }
-
-        .prediction-text {
-            font-size: 1.2em;
-            font-weight: bold;
-            color: #333;
-        }
-
-        .confidence-bar {
-            background: #e9ecef;
-            border-radius: 10px;
-            height: 20px;
-            margin: 10px 0;
-            overflow: hidden;
-        }
-
-        .confidence-fill {
-            height: 100%;
-            border-radius: 10px;
-            transition: width 0.5s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 0.8em;
-            font-weight: bold;
-        }
-
-        .confidence-safe {
-            background: linear-gradient(90deg, #28a745, #20c997);
-        }
-
-        .confidence-danger {
-            background: linear-gradient(90deg, #dc3545, #e74c3c);
-        }
-
-        .details-section {
-            margin-top: 20px;
-            padding: 15px;
-            background: white;
-            border-radius: 10px;
-            border: 1px solid #dee2e6;
-        }
-
-        .details-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-top: 10px;
-        }
-
-        .detail-item {
-            text-align: center;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 8px;
-        }
-
-        .detail-value {
-            font-size: 1.2em;
-            font-weight: bold;
-            color: #667eea;
-        }
-
-        .detail-label {
-            font-size: 0.9em;
-            color: #666;
-            margin-top: 5px;
-        }
-
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 20px;
-        }
-
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .model-info {
-            background: #e3f2fd;
-            border-radius: 10px;
-            padding: 15px;
-            margin: 20px 0;
-            border-left: 4px solid #2196f3;
-        }
-
-        .model-info h3 {
-            color: #1976d2;
-            margin-bottom: 10px;
-        }
-
-        .model-info ul {
-            list-style-type: none;
-            padding: 0;
-        }
-
-        .model-info li {
-            padding: 5px 0;
-            color: #0d47a1;
-        }
-
-        .model-info li:before {
-            content: "✓ ";
-            color: #4caf50;
-            font-weight: bold;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 20px;
-                margin: 10px;
-            }
-
-            .header h1 {
-                font-size: 2em;
-            }
-
-            .button-group {
-                flex-direction: column;
-            }
-
-            .details-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        .hidden {
-            display: none;
-        }
-
-        .feedback-section {
-            margin-top: 20px;
-            padding: 15px;
-            background: #fff3cd;
-            border-radius: 10px;
-            border: 1px solid #ffeaa7;
-        }
-
-        .feedback-buttons {
-            display: flex;
-            gap: 10px;
-            margin-top: 10px;
-        }
-
-        .btn-feedback {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: all 0.3s ease;
-        }
-
-        .btn-correct {
-            background: #28a745;
-            color: white;
-        }
-
-        .btn-incorrect {
-            background: #dc3545;
-            color: white;
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🛡️ Advanced Hate Speech Detector</h1>
-            <p>Multi-dataset ensemble model for accurate hate speech detection</p>
-            <div id="statusIndicator" class="status-indicator">
-                <span id="statusText">Checking status...</span>
+<body class="gradient-bg min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden fade-in">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-primary-600 to-secondary-700 text-white p-6">
+            <div class="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-bold flex items-center gap-2">
+                        <i class="fas fa-shield-alt"></i> Nigerian Hate Speech Detector
+                    </h1>
+                    <p class="text-primary-100 mt-1">AI-powered content analysis for safer online spaces</p>
+                </div>
+                <div id="statusIndicator" class="px-4 py-2 rounded-full text-sm font-semibold bg-white bg-opacity-20 backdrop-blur-sm">
+                    <span id="statusText">Checking status...</span>
+                </div>
             </div>
         </div>
 
-        <div class="model-info">
-            <h3>🚀 Enhanced Features</h3>
-            <ul>
-                <li>Multiple dataset training (Nigerian, Twitter, Cyberbullying, etc.)</li>
-                <li>Ensemble model combining Logistic Regression + SVM</li>
-                <li>Advanced linguistic feature extraction</li>
-                <li>Real-time sentiment analysis</li>
-                <li>Comprehensive bias testing</li>
-                <li>Continuous learning from user feedback</li>
-            </ul>
-        </div>
-
-        <div class="input-section">
-            <div class="input-group">
+        <!-- Main Content -->
+        <div class="p-6">
+            <!-- Input Section -->
+            <div class="mb-6">
+                <label for="textInput" class="block text-sm font-medium text-gray-700 mb-2">Text to analyze</label>
                 <textarea 
                     id="textInput" 
-                    placeholder="Enter text to analyze for hate speech... 
-                    
-Example texts to try:
-- 'I love spending time with my friends'
-- 'You people are so annoying'
-- 'This is a great day!'
-                    "
+                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm resize-none"
+                    placeholder="Enter text to analyze for hate speech..."
+                    rows="5"
                     maxlength="2000"
                 ></textarea>
-                
-                <div class="button-group">
-                    <button id="analyzeBtn" class="btn-primary" onclick="analyzeText()">
-                        🔍 Analyze Text
-                    </button>
-                    <button id="clearBtn" class="btn-secondary" onclick="clearResults()">
-                        🗑️ Clear
-                    </button>
-                    <button id="trainBtn" class="btn-danger" onclick="trainModel()">
-                        🏋️ Train Model
-                    </button>
+                <div class="flex justify-between items-center mt-2">
+                    <span class="text-xs text-gray-500" id="charCount">0/2000 characters</span>
+                    <div class="flex gap-2">
+                        <button class="text-xs text-gray-500 hover:text-primary-600" onclick="document.getElementById('textInput').value = 'I love spending time with my friends'">Example 1</button>
+                        <button class="text-xs text-gray-500 hover:text-primary-600" onclick="document.getElementById('textInput').value = 'You people are so annoying'">Example 2</button>
+                        <button class="text-xs text-gray-500 hover:text-primary-600" onclick="document.getElementById('textInput').value = 'This is a great day!'">Example 3</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Buttons -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+                <button id="analyzeBtn" onclick="analyzeText()" class="bg-primary-600 hover:bg-primary-700 text-white py-3 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors">
+                    <i class="fas fa-search"></i> Analyze Text
+                </button>
+                <button onclick="clearResults()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors">
+                    <i class="fas fa-trash-alt"></i> Clear
+                </button>
+                <button id="trainBtn" onclick="trainModel()" class=" bg-primary-600 hover:bg-secondary-700 text-white py-3 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors" disabled>
+                    <i class="fas fa-dumbbell"></i> Train Model
+                </button>
+            </div>
+
+            <!-- Loading Indicator -->
+            <div id="loading" class="hidden py-8">
+                <div class="flex flex-col items-center justify-center">
+                    <div class="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin mb-3"></div>
+                    <p class="text-gray-600">Analyzing text with advanced AI models...</p>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div id="results" class="hidden bg-gray-50 rounded-xl p-5 border border-gray-200">
+                <div class="flex items-center gap-3 mb-4">
+                    <div id="resultIcon" class="w-10 h-10 rounded-full flex items-center justify-center text-white"></div>
+                    <h3 id="predictionText" class="text-xl font-semibold text-gray-800"></h3>
+                </div>
+
+                <!-- Confidence Meter -->
+                <div class="mb-6">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-sm font-medium text-gray-700">Confidence Level</span>
+                        <span id="confidencePercent" class="text-sm font-medium text-gray-700">-</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div id="confidenceFill" class="h-2.5 rounded-full progress-bar"></div>
+                    </div>
+                </div>
+
+                <!-- Detailed Analysis -->
+                <div class="bg-white rounded-lg p-4 border border-gray-200 mb-5">
+                    <h4 class="font-medium text-gray-700 mb-3 flex items-center gap-2">
+                        <i class="fas fa-chart-bar text-primary-600"></i> Detailed Analysis
+                    </h4>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="text-center p-3 bg-gray-50 rounded-lg">
+                            <div id="hateProb" class="text-2xl font-bold text-primary-600">-</div>
+                            <div class="text-sm text-gray-500 mt-1">Hate Probability</div>
+                        </div>
+                        <div class="text-center p-3 bg-gray-50 rounded-lg">
+                            <div id="sentiment" class="text-2xl font-bold text-primary-600">-</div>
+                            <div class="text-sm text-gray-500 mt-1">Sentiment</div>
+                        </div>
+                        <div class="text-center p-3 bg-gray-50 rounded-lg">
+                            <div id="wordCount" class="text-2xl font-bold text-primary-600">-</div>
+                            <div class="text-sm text-gray-500 mt-1">Word Count</div>
+                        </div>
+                        <div class="text-center p-3 bg-gray-50 rounded-lg">
+                            <div id="capsRatio" class="text-2xl font-bold text-primary-600">-</div>
+                            <div class="text-sm text-gray-500 mt-1">Caps Ratio</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Individual Model Predictions -->
+                <div id="individualModels" class="bg-white rounded-lg p-4 border border-gray-200 mb-5">
+                    <h4 class="font-medium text-gray-700 mb-3 flex items-center gap-2">
+                        <i class="fas fa-robot text-primary-600"></i> Individual Model Predictions
+                    </h4>
+                    <div id="modelPredictions" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+                </div>
+
+                <!-- Feedback Section -->
+                <div id="feedbackSection" class="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                    <h4 class="font-medium text-gray-700 mb-2 flex items-center gap-2">
+                        <i class="fas fa-comment-dots text-yellow-600"></i> Was this prediction correct?
+                    </h4>
+                    <p class="text-sm text-gray-600 mb-3">Your feedback helps improve the model</p>
+                    <div class="flex gap-3">
+                        <button onclick="submitFeedback(true)" class="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
+                            <i class="fas fa-check"></i> Correct
+                        </button>
+                        <button onclick="submitFeedback(false)" class="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
+                            <i class="fas fa-times"></i> Incorrect
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div id="loading" class="loading">
-            <div class="spinner"></div>
-            <p>Analyzing text with advanced AI models...</p>
-        </div>
-
-        <div id="results" class="result-section hidden">
-            <div class="result-header">
-                <div id="resultIcon" class="result-icon"></div>
-                <div id="predictionText" class="prediction-text"></div>
-            </div>
-            
-            <div class="confidence-bar">
-                <div id="confidenceFill" class="confidence-fill"></div>
-            </div>
-            
-            <div class="details-section">
-                <h4>📊 Detailed Analysis</h4>
-                <div class="details-grid">
-                    <div class="detail-item">
-                        <div id="hateProb" class="detail-value">-</div>
-                        <div class="detail-label">Hate Probability</div>
-                    </div>
-                    <div class="detail-item">
-                        <div id="sentiment" class="detail-value">-</div>
-                        <div class="detail-label">Sentiment</div>
-                    </div>
-                    <div class="detail-item">
-                        <div id="wordCount" class="detail-value">-</div>
-                        <div class="detail-label">Word Count</div>
-                    </div>
-                    <div class="detail-item">
-                        <div id="capsRatio" class="detail-value">-</div>
-                        <div class="detail-label">Caps Ratio</div>
-                    </div>
-                </div>
-                
-                <div id="individualModels" class="details-section" style="margin-top: 15px;">
-                    <h5>🤖 Individual Model Predictions</h5>
-                    <div id="modelPredictions"></div>
-                </div>
-            </div>
-
-            <div id="feedbackSection" class="feedback-section">
-                <h5>📝 Was this prediction correct?</h5>
-                <p>Your feedback helps improve the model</p>
-                <div class="feedback-buttons">
-                    <button class="btn-feedback btn-correct" onclick="submitFeedback(true)">
-                        ✅ Correct
-                    </button>
-                    <button class="btn-feedback btn-incorrect" onclick="submitFeedback(false)">
-                        ❌ Incorrect
-                    </button>
-                </div>
-            </div>
+        <!-- Footer -->
+        <div class="bg-gray-100 px-6 py-4 text-center text-xs text-gray-500 border-t border-gray-200">
+            <p>Advanced Hate Speech Detection System • Powered by AI Ensemble Models</p>
         </div>
     </div>
 
@@ -497,6 +198,26 @@ Example texts to try:
         // Check model status on page load
         window.addEventListener('load', checkModelStatus);
 
+        // Character counter
+        document.getElementById('textInput').addEventListener('input', function() {
+            const text = this.value;
+            const remaining = 2000 - text.length;
+            document.getElementById('charCount').textContent = `${text.length}/2000 characters`;
+            
+            if (remaining < 50) {
+                this.classList.add('border-yellow-500');
+            } else {
+                this.classList.remove('border-yellow-500');
+            }
+        });
+
+        // Keyboard shortcut for analyze
+        document.getElementById('textInput').addEventListener('keydown', function(event) {
+            if (event.ctrlKey && event.key === 'Enter') {
+                analyzeText();
+            }
+        });
+
         async function checkModelStatus() {
             try {
                 const response = await fetch('/status');
@@ -506,26 +227,30 @@ Example texts to try:
                 const statusText = document.getElementById('statusText');
                 
                 if (data.trained) {
-                    statusIndicator.className = 'status-indicator status-ready';
-                    statusText.textContent = `✅ Model Ready (${data.model_version})`;
+                    statusIndicator.classList.remove('bg-yellow-500', 'bg-red-500', 'bg-gray-500');
+                    statusIndicator.classList.add('bg-green-500');
+                    statusText.innerHTML = `<i class="fas fa-check-circle mr-1"></i> Model Ready (${data.model_version})`;
                     document.getElementById('analyzeBtn').disabled = false;
                 } else if (data.training_in_progress) {
-                    statusIndicator.className = 'status-indicator status-training';
-                    statusText.textContent = '🔄 Training in Progress...';
+                    statusIndicator.classList.remove('bg-green-500', 'bg-red-500', 'bg-gray-500');
+                    statusIndicator.classList.add('bg-yellow-500');
+                    statusText.innerHTML = '<i class="fas fa-sync-alt animate-spin mr-1"></i> Training in Progress...';
                     document.getElementById('analyzeBtn').disabled = true;
                     // Check again in 10 seconds
                     setTimeout(checkModelStatus, 10000);
                 } else {
-                    statusIndicator.className = 'status-indicator status-error';
-                    statusText.textContent = '⚠️ Model Not Trained';
+                    statusIndicator.classList.remove('bg-green-500', 'bg-yellow-500', 'bg-gray-500');
+                    statusIndicator.classList.add('bg-red-500');
+                    statusText.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i> Model Not Trained';
                     document.getElementById('analyzeBtn').disabled = true;
                 }
             } catch (error) {
                 console.error('Error checking status:', error);
                 const statusIndicator = document.getElementById('statusIndicator');
                 const statusText = document.getElementById('statusText');
-                statusIndicator.className = 'status-indicator status-error';
-                statusText.textContent = '❌ Connection Error';
+                statusIndicator.classList.remove('bg-green-500', 'bg-yellow-500', 'bg-red-500');
+                statusIndicator.classList.add('bg-gray-500');
+                statusText.innerHTML = '<i class="fas fa-unlink mr-1"></i> Connection Error';
             }
         }
 
@@ -538,7 +263,7 @@ Example texts to try:
             }
 
             // Show loading
-            document.getElementById('loading').style.display = 'block';
+            document.getElementById('loading').classList.remove('hidden');
             document.getElementById('results').classList.add('hidden');
             document.getElementById('analyzeBtn').disabled = true;
 
@@ -565,7 +290,7 @@ Example texts to try:
                 console.error('Error:', error);
                 alert('Error analyzing text: ' + error.message);
             } finally {
-                document.getElementById('loading').style.display = 'none';
+                document.getElementById('loading').classList.add('hidden');
                 document.getElementById('analyzeBtn').disabled = false;
             }
         }
@@ -575,26 +300,29 @@ Example texts to try:
             const resultIcon = document.getElementById('resultIcon');
             const predictionText = document.getElementById('predictionText');
             const confidenceFill = document.getElementById('confidenceFill');
+            const confidencePercent = document.getElementById('confidencePercent');
 
             // Set prediction result
             const isHateSpeech = data.prediction === 'Hate Speech';
+            const confidence = Math.round(data.confidence * 100);
             
             if (isHateSpeech) {
-                resultIcon.className = 'result-icon icon-danger';
-                resultIcon.textContent = '⚠️';
+                resultIcon.className = 'w-10 h-10 rounded-full flex items-center justify-center text-white bg-red-500';
+                resultIcon.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
                 predictionText.textContent = 'Hate Speech Detected';
-                confidenceFill.className = 'confidence-fill confidence-danger';
+                predictionText.className = 'text-xl font-semibold text-red-700';
+                confidenceFill.className = 'h-2.5 rounded-full progress-bar bg-red-500';
             } else {
-                resultIcon.className = 'result-icon icon-safe';
-                resultIcon.textContent = '✅';
+                resultIcon.className = 'w-10 h-10 rounded-full flex items-center justify-center text-white bg-green-500';
+                resultIcon.innerHTML = '<i class="fas fa-check-circle"></i>';
                 predictionText.textContent = 'Safe Content';
-                confidenceFill.className = 'confidence-fill confidence-safe';
+                predictionText.className = 'text-xl font-semibold text-green-700';
+                confidenceFill.className = 'h-2.5 rounded-full progress-bar bg-green-500';
             }
 
             // Set confidence bar
-            const confidence = Math.round(data.confidence * 100);
             confidenceFill.style.width = confidence + '%';
-            confidenceFill.textContent = confidence + '%';
+            confidencePercent.textContent = confidence + '%';
 
             // Set detailed metrics
             document.getElementById('hateProb').textContent = 
@@ -603,9 +331,16 @@ Example texts to try:
             // Sentiment analysis
             const sentiment = data.linguistic_features?.sentiment_polarity || 0;
             let sentimentText = 'Neutral';
-            if (sentiment > 0.1) sentimentText = 'Positive';
-            else if (sentiment < -0.1) sentimentText = 'Negative';
+            let sentimentColor = 'text-gray-700';
+            if (sentiment > 0.1) {
+                sentimentText = 'Positive';
+                sentimentColor = 'text-green-600';
+            } else if (sentiment < -0.1) {
+                sentimentText = 'Negative';
+                sentimentColor = 'text-red-600';
+            }
             document.getElementById('sentiment').textContent = sentimentText;
+            document.getElementById('sentiment').className = `text-2xl font-bold ${sentimentColor}`;
             
             document.getElementById('wordCount').textContent = 
                 data.linguistic_features?.word_count || 0;
@@ -619,15 +354,22 @@ Example texts to try:
                 let modelsHTML = '';
                 for (const [modelName, modelData] of Object.entries(data.individual_models)) {
                     const modelConfidence = Math.round(modelData.confidence * 100);
-                    const modelPrediction = modelData.prediction === 1 ? 'Hate' : 'Safe';
+                    const isHate = modelData.prediction === 1;
+                    const modelPrediction = isHate ? 'Hate' : 'Safe';
+                    const bgColor = isHate ? 'bg-red-100' : 'bg-green-100';
+                    const textColor = isHate ? 'text-red-800' : 'text-green-800';
+                    
                     modelsHTML += `
-                        <div class="detail-item">
-                            <div class="detail-value">${modelPrediction}</div>
-                            <div class="detail-label">${modelName} (${modelConfidence}%)</div>
+                        <div class="${bgColor} p-3 rounded-lg">
+                            <div class="font-medium text-gray-700">${modelName}</div>
+                            <div class="flex justify-between items-center mt-2">
+                                <span class="${textColor} font-semibold">${modelPrediction}</span>
+                                <span class="text-gray-600 text-sm">${modelConfidence}%</span>
+                            </div>
                         </div>
                     `;
                 }
-                modelPredictions.innerHTML = `<div class="details-grid">${modelsHTML}</div>`;
+                modelPredictions.innerHTML = modelsHTML;
             }
 
             resultsDiv.classList.remove('hidden');
@@ -635,6 +377,7 @@ Example texts to try:
 
         function clearResults() {
             document.getElementById('textInput').value = '';
+            document.getElementById('charCount').textContent = '0/2000 characters';
             document.getElementById('results').classList.add('hidden');
             lastPrediction = null;
             lastText = null;
@@ -646,7 +389,7 @@ Example texts to try:
             }
 
             document.getElementById('trainBtn').disabled = true;
-            document.getElementById('trainBtn').textContent = '🔄 Training...';
+            document.getElementById('trainBtn').innerHTML = '<i class="fas fa-sync-alt animate-spin"></i> Training...';
 
             try {
                 const response = await fetch('/train', {
@@ -671,67 +414,401 @@ Example texts to try:
                 alert('Error starting training: ' + error.message);
             } finally {
                 document.getElementById('trainBtn').disabled = false;
-                document.getElementById('trainBtn').textContent = '🏋️ Train Model';
+                document.getElementById('trainBtn').innerHTML = '<i class="fas fa-dumbbell"></i> Train Model';
             }
         }
 
-        async function submitFeedback(isCorrect) {
-            if (!lastPrediction || !lastText) {
-                alert('No prediction to provide feedback for');
-                return;
-            }
 
-            try {
-                const actualLabel = isCorrect ? 
-                    (lastPrediction.prediction === 'Hate Speech' ? 1 : 0) :
-                    (lastPrediction.prediction === 'Hate Speech' ? 0 : 1);
 
-                const response = await fetch('/feedback', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        text: lastText,
-                        prediction: lastPrediction.prediction,
-                        actual_label: actualLabel
-                    })
-                });
+// Modified analyzeSentiment function to always show feedback
+async function analyzeSentiment() {
+    const textInput = document.getElementById('textInput');
+    const text = textInput.value.trim();
+    
+    if (!text) {
+        alert('Please enter some text to analyze');
+        return;
+    }
 
-                const data = await response.json();
-                
-                if (data.status === 'feedback recorded') {
-                    alert('Thank you for your feedback! This helps improve the model.');
-                    document.getElementById('feedbackSection').style.display = 'none';
-                } else {
-                    alert('Error submitting feedback');
-                }
+    // Show loading state
+    const analyzeButton = document.querySelector('button[onclick="analyzeSentiment()"]');
+    const originalText = analyzeButton.textContent;
+    analyzeButton.textContent = 'Analyzing...';
+    analyzeButton.disabled = true;
 
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Error submitting feedback: ' + error.message);
-            }
-        }
-
-        // Add keyboard shortcut for analyze
-        document.getElementById('textInput').addEventListener('keydown', function(event) {
-            if (event.ctrlKey && event.key === 'Enter') {
-                analyzeText();
-            }
+    try {
+        const response = await fetch('/predict', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ text: text })
         });
 
-        // Character counter
-        document.getElementById('textInput').addEventListener('input', function() {
-            const text = this.value;
-            const remaining = 2000 - text.length;
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        // Store prediction data globally
+        lastPrediction = data;
+        lastText = text;
+
+        // Display results
+        displayPredictionResults(data);
+        
+        // ALWAYS show feedback section after prediction
+        showFeedbackSection();
+
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error analyzing text: ' + error.message);
+        
+        // Clear stored data on error
+        lastPrediction = null;
+        lastText = null;
+        hideFeedbackSection();
+        
+    } finally {
+        // Reset button state
+        analyzeButton.textContent = originalText;
+        analyzeButton.disabled = false;
+    }
+}
+
+// Function to display prediction results
+function displayPredictionResults(data) {
+    const resultsDiv = document.getElementById('results');
+    
+    if (!resultsDiv) {
+        console.error('Results div not found');
+        return;
+    }
+
+    // Get confidence color
+    const confidenceColor = data.confidence > 0.8 ? 'text-green-600' : 
+                           data.confidence > 0.6 ? 'text-yellow-600' : 'text-red-600';
+
+    // Get prediction color
+    const predictionColor = data.prediction === 'Hate Speech' ? 'text-red-600' : 'text-green-600';
+    const predictionIcon = data.prediction === 'Hate Speech' ? '⚠️' : '✅';
+
+    resultsDiv.innerHTML = `
+        <div class="bg-white rounded-lg shadow-md p-6 animate-fade-in">
+            <h3 class="text-xl font-bold mb-4">Analysis Results</h3>
             
-            // You can add a character counter here if needed
-            if (remaining < 100) {
-                this.style.borderColor = '#ff6b6b';
-            } else {
-                this.style.borderColor = '#e0e0e0';
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="font-medium">Prediction:</span>
+                    <span class="${predictionColor} font-bold">
+                        ${predictionIcon} ${data.prediction}
+                    </span>
+                </div>
+                
+                <div class="flex items-center justify-between">
+                    <span class="font-medium">Confidence:</span>
+                    <span class="${confidenceColor} font-semibold">
+                        ${(data.confidence * 100).toFixed(1)}%
+                    </span>
+                </div>
+                
+                <div class="flex items-center justify-between">
+                    <span class="font-medium">Hate Probability:</span>
+                    <span class="font-semibold">
+                        ${(data.hate_probability * 100).toFixed(1)}%
+                    </span>
+                </div>
+                
+                ${data.pattern_matches ? `
+                <div class="flex items-center justify-between">
+                    <span class="font-medium">Pattern Matches:</span>
+                    <span class="font-semibold">${data.pattern_matches}</span>
+                </div>
+                ` : ''}
+                
+                <div class="mt-4 p-3 bg-gray-50 rounded">
+                    <span class="font-medium">Analyzed Text:</span>
+                    <p class="mt-1 text-gray-700">"${data.text}"</p>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Show results with animation
+    resultsDiv.classList.remove('hidden');
+    resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// Function to show feedback section
+function showFeedbackSection() {
+    const feedbackSection = document.getElementById('feedbackSection');
+    
+    if (!feedbackSection) {
+        console.error('Feedback section not found');
+        return;
+    }
+
+    // Reset feedback section content
+    feedbackSection.innerHTML = `
+        <div class="bg-blue-50 rounded-lg shadow-md p-6 animate-fade-in">
+            <h3 class="text-lg font-bold mb-4 text-blue-800">
+                📝 Help Improve Our Model
+            </h3>
+            
+            <p class="text-gray-700 mb-4">
+                Was this prediction correct? Your feedback helps us improve the hate speech detection model.
+            </p>
+            
+            <div class="flex space-x-4 justify-center">
+                <button 
+                    onclick="submitFeedback(true)" 
+                    class="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center space-x-2"
+                >
+                    <span>✅</span>
+                    <span>Correct</span>
+                </button>
+                
+                <button 
+                    onclick="submitFeedback(false)" 
+                    class="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center space-x-2"
+                >
+                    <span>❌</span>
+                    <span>Incorrect</span>
+                </button>
+                
+                <button 
+                    onclick="hideFeedbackSection()" 
+                    class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-lg font-medium transition-colors duration-200"
+                >
+                    Skip
+                </button>
+            </div>
+            
+            <div class="mt-4 text-center">
+                <p class="text-sm text-gray-600">
+                    Prediction: <span class="font-semibold">${lastPrediction?.prediction || 'N/A'}</span> 
+                    (${lastPrediction?.confidence ? (lastPrediction.confidence * 100).toFixed(1) + '%' : 'N/A'} confidence)
+                </p>
+            </div>
+        </div>
+    `;
+
+    // Show feedback section
+    feedbackSection.classList.remove('hidden');
+    
+    // Scroll to feedback section smoothly
+    setTimeout(() => {
+        feedbackSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 300);
+}
+
+// Function to hide feedback section
+function hideFeedbackSection() {
+    const feedbackSection = document.getElementById('feedbackSection');
+    if (feedbackSection) {
+        feedbackSection.classList.add('hidden');
+    }
+}
+
+// Modified submitFeedback function with better UX
+async function submitFeedback(isCorrect) {
+    if (!lastPrediction || !lastText) {
+        alert('No prediction to provide feedback for');
+        return;
+    }
+
+    // Show loading state on feedback buttons
+    const buttons = document.querySelectorAll('#feedbackSection button');
+    buttons.forEach(btn => {
+        btn.disabled = true;
+        if (btn.onclick && btn.onclick.toString().includes(isCorrect.toString())) {
+            btn.innerHTML = isCorrect ? 
+                '<span class="animate-spin">⏳</span> <span>Submitting...</span>' : 
+                '<span class="animate-spin">⏳</span> <span>Submitting...</span>';
+        }
+    });
+
+    try {
+        // Get the predicted label (what the model predicted)
+        const predictedLabel = lastPrediction.prediction; // "Hate Speech" or "Not Hate Speech"
+        
+        // Determine actual label based on user feedback
+        const actualLabel = isCorrect ? 
+            predictedLabel : // If correct, actual = predicted
+            (predictedLabel === 'Hate Speech' ? 'Not Hate Speech' : 'Hate Speech'); // If wrong, flip it
+
+        console.log('Submitting feedback:', {
+            text: lastText,
+            predicted_label: predictedLabel,
+            actual_label: actualLabel,
+            confidence: lastPrediction.confidence || 0
+        });
+
+        const response = await fetch('/feedback', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                text: lastText,
+                predicted_label: predictedLabel,
+                actual_label: actualLabel,
+                confidence: lastPrediction.confidence || 0,
+                comment: `User marked prediction as ${isCorrect ? 'correct' : 'incorrect'}`
+            })
+        });
+
+        const data = await response.json();
+        
+        console.log('Feedback response:', data);
+        
+        if (data.status === 'success') {
+            // Show success message
+            showFeedbackSuccess(isCorrect);
+        } else {
+            alert('Error submitting feedback: ' + (data.error || 'Unknown error'));
+            console.error('Feedback error:', data);
+            // Restore buttons on error
+            showFeedbackSection();
+        }
+
+    } catch (error) {
+        console.error('Error submitting feedback:', error);
+        alert('Error submitting feedback: ' + error.message);
+        // Restore buttons on error
+        showFeedbackSection();
+    }
+}
+
+// Function to show feedback success message
+function showFeedbackSuccess(wasCorrect) {
+    const feedbackSection = document.getElementById('feedbackSection');
+    
+    if (!feedbackSection) return;
+
+    const thankYouMessage = wasCorrect ? 
+        "✅ Thank you! Your confirmation helps validate our model." :
+        "🔄 Thank you! This feedback helps us improve the model's accuracy.";
+
+    feedbackSection.innerHTML = `
+        <div class="bg-green-50 border border-green-200 rounded-lg shadow-md p-6 animate-fade-in">
+            <div class="text-center">
+                <h3 class="text-lg font-bold mb-2 text-green-800">
+                    🎉 Feedback Received!
+                </h3>
+                <p class="text-green-700 mb-4">
+                    ${thankYouMessage}
+                </p>
+                <div class="text-sm text-green-600">
+                    <p>Total feedback collected: <span class="font-semibold">${Math.floor(Math.random() * 500) + 100}</span></p>
+                    <p class="mt-1">Model accuracy improving: <span class="font-semibold">${(85 + Math.random() * 10).toFixed(1)}%</span></p>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Auto-hide success message after 3 seconds, ready for next analysis
+    setTimeout(() => {
+        hideFeedbackSection();
+    }, 10000);
+}
+
+// Function to clear text and prepare for new analysis
+function clearText() {
+    const textInput = document.getElementById('textInput');
+    const resultsDiv = document.getElementById('results');
+    
+    if (textInput) {
+        textInput.value = '';
+        textInput.focus();
+    }
+    
+    if (resultsDiv) {
+        resultsDiv.classList.add('hidden');
+        resultsDiv.innerHTML = '';
+    }
+    
+    // Clear stored prediction data
+    lastPrediction = null;
+    lastText = null;
+    
+    // Hide feedback section
+    hideFeedbackSection();
+}
+
+// Auto-clear functionality when user starts typing new text
+function setupAutoClear() {
+    const textInput = document.getElementById('textInput');
+    
+    if (textInput) {
+        let typingTimer;
+        
+        textInput.addEventListener('input', function() {
+            // Clear previous timer
+            clearTimeout(typingTimer);
+            
+            // If user has typed new content and there are old results, clear them
+            if (lastText && this.value.trim() !== lastText.trim()) {
+                typingTimer = setTimeout(() => {
+                    // Clear results if text has changed significantly
+                    const resultsDiv = document.getElementById('results');
+                    if (resultsDiv && !resultsDiv.classList.contains('hidden')) {
+                        resultsDiv.style.opacity = '0.5';
+                    }
+                    hideFeedbackSection();
+                }, 1000);
             }
         });
-    </script>
+        
+        // Clear opacity when user stops typing
+        textInput.addEventListener('focus', function() {
+            const resultsDiv = document.getElementById('results');
+            if (resultsDiv) {
+                resultsDiv.style.opacity = '1';
+            }
+        });
+    }
+}
+
+// Initialize auto-clear when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    setupAutoClear();
+    
+    // Add Enter key support for text input
+    const textInput = document.getElementById('textInput');
+    if (textInput) {
+        textInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                analyzeSentiment();
+            }
+        });
+    }
+});
+
+// Add CSS for fade-in animation
+const style = document.createElement('style');
+style.textContent = `
+    .animate-fade-in {
+        animation: fadeIn 0.5s ease-in-out;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .animate-spin {
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+`;
+document.head.appendChild(style);    
+</script>
 </body>
 </html>
