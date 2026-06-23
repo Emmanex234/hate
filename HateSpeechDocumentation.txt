@@ -1,0 +1,194 @@
+=========================================
+NIGERIAN HATE SPEECH DETECTION SYSTEM DOCUMENTATION
+=========================================
+
+==============================
+ 1️⃣ TECHNICAL DOCUMENTATION
+==============================
+
+PROJECT TITLE:
+DESIGN AND IMPLEMENTATION OF A HATE SPEECH DETECTION MODEL USING NIGERIAN TWEETS
+
+DEVELOPER: Emmanuel Udofot
+
+-----------------------------------------
+1. SYSTEM OVERVIEW
+-----------------------------------------
+The system is a web-based application that detects hate speech in Nigerian English and Pidgin text using machine learning.
+It was developed with Python, Flask, and Scikit-learn, and trained on a labeled dataset of social media comments.
+
+The model classifies user input into two categories:
+- Hate Speech
+- Not Hate Speech
+
+-----------------------------------------
+2. SYSTEM ARCHITECTURE
+-----------------------------------------
+Architecture Flow:
+User Input → Preprocessing → TF-IDF Vectorizer → Logistic Regression Model → Prediction Output
+
+Components:
+1. Frontend (HTML/CSS/JS): Simple web form for user input
+2. Backend (Flask): Handles routes, prediction logic, and returns results
+3. Model (Scikit-learn): Logistic Regression trained on preprocessed text data
+4. Feedback System: Collects wrong predictions for future retraining
+5. Storage: Dataset stored as CSV; trained model saved as nigerian_hate_speech_model.pkl using joblib
+
+-----------------------------------------
+3. TOOLS AND LIBRARIES USED
+-----------------------------------------
+pandas         - Data handling and cleaning
+numpy          - Numerical operations
+scikit-learn   - Machine learning (training, TF-IDF, Logistic Regression)
+Flask          - Web framework for deployment
+joblib         - Saving and loading trained model
+re             - Text preprocessing (remove punctuation, links, etc.)
+
+-----------------------------------------
+4. DATA PREPARATION
+-----------------------------------------
+Steps taken:
+1. Data collection (Nigerian hate speech dataset)
+2. Data cleaning (removing punctuation, converting to lowercase, removing stop words)
+3. Tokenization using TF-IDF Vectorizer
+4. Split into 80% training and 20% testing sets
+
+-----------------------------------------
+5. MODEL TRAINING
+-----------------------------------------
+Algorithm used: Logistic Regression
+
+Example code:
+model = LogisticRegression()
+model.fit(X_train, y_train)
+
+- Trained with 80% of data
+- Tested with 20%
+- Saved using:
+  joblib.dump(model, 'model.pkl')
+
+-----------------------------------------
+6. EVALUATION METRICS
+-----------------------------------------
+Accuracy: 0.90
+Precision: 0.88
+Recall: 0.91
+F1-Score: 0.89
+
+Metrics Description:
+- Accuracy: Overall correctness of the model
+- Precision: How often the model is right when it predicts hate speech
+- Recall: How many actual hate speech texts the model correctly detects
+- F1-Score: Balance between precision and recall
+
+Confusion Matrix was used to visualize model performance.
+
+-----------------------------------------
+7. DEPLOYMENT (FLASK)
+-----------------------------------------
+Key routes:
+- '/' → homepage
+- '/predict' → handles text input and returns classification result
+- '/feedback' → stores user feedback for retraining
+
+Example route code:
+@app.route('/predict', methods=['POST'])
+def predict():
+    text = request.form['text']
+    prediction = model.predict([text])[0]
+    return render_template('result.html', prediction=prediction)
+
+-----------------------------------------
+8. MODEL RETRAINING (WITH FEEDBACK)
+-----------------------------------------
+Feedback data is merged with the main dataset during retraining:
+
+Example:
+updated_data = pd.concat([old_data, feedback_data])
+model.fit(updated_data['text'], updated_data['label'])
+joblib.dump(model, 'model.pkl')
+
+This ensures new feedback improves the model without deleting old data.
+
+-----------------------------------------
+9. SECURITY & ERROR HANDLING
+-----------------------------------------
+- Input validation to prevent empty text submission
+- Exception handling around model prediction
+- Limited access to feedback routes for data integrity
+
+-----------------------------------------
+10. SYSTEM REQUIREMENTS
+-----------------------------------------
+Hardware:
+- Any PC with minimum 4GB RAM
+
+Software:
+- Python 3.10.2
+- Flask
+- Scikit-learn
+- Pandas
+- Joblib
+
+=========================================
+ 2️⃣ USER DOCUMENTATION
+=========================================
+
+-----------------------------------------
+1. SYSTEM OVERVIEW
+-----------------------------------------
+This is a simple web-based application that detects whether a given sentence contains hate speech or not.
+
+-----------------------------------------
+2. HOW TO RUN THE APPLICATION (LOCALLY)
+-----------------------------------------
+Step 1:
+Install required libraries:
+pip install flask scikit-learn pandas numpy joblib
+
+Step 2:
+Run the Flask app:
+python app.py
+
+Step 3:
+Open your browser and go to:
+http://127.0.0.1:5000
+
+-----------------------------------------
+3. HOW TO USE THE WEB APP
+-----------------------------------------
+1. Enter a sentence or comment into the input box (English or Pidgin)
+2. Click on the “Analyze Text” button
+3. The system will display:
+   - “Hate Speech Detected” (if hateful)
+   - “No Hate Speech Detected” (if normal)
+4. If the prediction is wrong, click the “Send Feedback” button to correct it.
+
+-----------------------------------------
+4. FEEDBACK SYSTEM
+-----------------------------------------
+Users can send corrections by indicating whether a text was misclassified.
+The admin can later use this feedback to retrain the model and improve accuracy.
+
+-----------------------------------------
+5. TROUBLESHOOTING
+-----------------------------------------
+Issue: App not opening
+Solution: Ensure Flask is installed and port 5000 is free.
+
+Issue: nigerian_hate_speech_model.pkl not found"
+Solution: Re-train the model or place the saved file in your project folder.
+
+Issue: Wrong predictions
+Solution: Send feedback to improve future accuracy.
+
+-----------------------------------------
+6. CONTACT
+-----------------------------------------
+Developer: Emmanuel Udofot
+Email: emmanueludofot40@gmail.com
+Institution: Computer Science, FUTO
+
+=========================================
+END OF DOCUMENTATION
+=========================================

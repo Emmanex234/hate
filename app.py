@@ -863,6 +863,88 @@ def not_found(error):
 def internal_error(error):
     return jsonify({"error": "Internal server error"}), 500
 
+@app.route('/feedback/all', methods=['GET'])
+def get_all_feedback():
+    """Return all collected feedback entries"""
+    try:
+        if not detector.feedback_buffer:
+            return jsonify({"message": "No feedback available yet"}), 200
+
+        return jsonify({
+            "total_feedback": len(detector.feedback_buffer),
+            "feedback_entries": detector.feedback_buffer
+        }), 200
+    except Exception as e:
+        logger.error(f"Error fetching feedback: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+# ==============================
+# 🔹 RETRAIN MODEL ROUTE (Old + New)
+# ==============================
+@app.route('/retrain', methods=['POST'])
+def retrain_with_feedback():
+    """Retrain the model using both original dataset + user feedback"""
+    try:
+        # Path to your original training data file
+        original_dataset_path = 'original_dataset.csv'  # ⚠️ update if filename different
+
+        # Check if any feedback is available
+        if not detector.feedback_buffer:
+            return jsonify({"error": "No feedback available for retraining"}), 400
+
+        logger.info("Starting retraining with original data + feedback data...")
+
+        # 1️⃣ Load original dataset
+        if not os.path.exists(original_dataset_path):
+            return jsonify({"error": "Original dataset not found"}), 400
+
+        df_old = pd.read_csv(original_dataset_path)
+
+        # Ensure consistent column names
+        df_old.rename(columns={df_old.columns[0]: 'text', df_old.columns[1]: 'label'}, inplace=True)
+
+        # Convert labels to binary (1 = hate speech, 0 = not hate speech)
+        df_old['label'] = df_old['label'].apply(lambda x: 1 if str(x).lower() == 'hate speech' else 0)
+
+        # 2️⃣ Load feedback data
+        df_feedback = pd.DataFrame(detector.feedback_buffer)
+        df_feedback['label'] = df_feedback['actual_label'].apply(
+            lambda x: 1 if str(x).lower() == 'hate speech' else 0
+        )
+
+        # 3️⃣ Combine old + new data
+        df_combined = pd.concat([df_old, df_feedback], ignore_index=True)
+
+        # 4️⃣ Preprocess text
+        texts = [detector.fast_preprocess_text(t) for t in df_combined['text']]
+        labels = df_combined['label'].values
+
+        # 5️⃣ Rebuild vectorizer with combined data
+        detector.vectorizer = TfidfVectorizer(max_features=5000)
+        X = detector.vectorizer.fit_transform(texts)
+
+        # 6️⃣ Retrain model
+        detector.model.fit(X, labels)
+        detector.save_model()
+
+        logger.info("✅ Retraining complete — model updated with feedback + old data")
+
+        # 7️⃣ Clear feedback after retraining
+        detector.feedback_buffer = []
+        with open('feedback_data.json', 'w') as f:
+            json.dump(detector.feedback_buffer, f, indent=4)
+
+        return jsonify({
+            "status": "success",
+            "message": "Model retrained successfully using old data + new feedback",
+            "total_samples": len(df_combined)
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Retraining error: {str(e)}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
 # Auto-train model on startup
 def auto_train_on_startup():
     """Auto-train model on startup if conditions are met"""
